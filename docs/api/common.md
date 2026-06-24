@@ -78,6 +78,12 @@ Rules:
 
 # Authentication
 
+Phone numbers must only be accepted from a verified Firebase ID Token.
+
+Backend services must never trust a client-supplied phone number during authentication.
+
+Firebase is the source of truth for phone verification.
+
 Protected endpoints require:
 
 ```http
@@ -286,11 +292,35 @@ Refresh Token:
 Refresh Token Rotation:
 Mandatory
 
+Refresh Token Reuse Detection:
+Mandatory
+
+Refresh Token Family Tracking:
+Mandatory
+
 Refresh Token Storage:
 Hashed only
 
 HTTPS:
 Mandatory in production
+
+---
+
+# Official Auth Phase 1 Contract
+
+The following endpoints are the approved Phase 1 auth contract:
+
+POST /api/v1/auth/login
+
+POST /api/v1/auth/refresh
+
+POST /api/v1/auth/logout
+
+GET /api/v1/auth/me
+
+PATCH /api/v1/auth/me
+
+GET /api/v1/health
 
 ---
 

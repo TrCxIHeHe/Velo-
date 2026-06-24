@@ -59,6 +59,8 @@ CREATE TABLE refresh_tokens (
 
     token_hash VARCHAR(255) NOT NULL,
 
+    family_id UUID NOT NULL,
+
     expires_at TIMESTAMP NOT NULL,
 
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
@@ -92,6 +94,16 @@ ON refresh_tokens(user_id);
 ```sql
 CREATE INDEX idx_refresh_tokens_expiry
 ON refresh_tokens(expires_at);
+```
+
+```sql
+CREATE INDEX idx_refresh_tokens_hash
+ON refresh_tokens(token_hash);
+```
+
+```sql
+CREATE INDEX idx_refresh_tokens_family
+ON refresh_tokens(family_id);
 ```
 
 ---
@@ -141,6 +153,30 @@ Store Hash(Token B)
 Delete or Revoke Token A
 
 This prevents replay attacks.
+
+---
+
+# Refresh Token Family
+
+Each refresh token belongs to a token family.
+
+A family is identified by:
+
+family_id UUID
+
+When a refresh token is rotated:
+
+1. Old token is revoked
+2. New token is issued
+3. New token inherits the same family_id
+
+If a revoked refresh token is presented:
+
+1. Treat as replay attack
+2. Revoke all tokens belonging to that family
+3. Force re-authentication
+
+This enables refresh token reuse detection.
 
 ---
 
