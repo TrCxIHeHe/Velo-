@@ -1,7 +1,13 @@
 from fastapi import FastAPI
 
-app=FastAPI(title='Velo Backend')
+from app.wallet.router import router as wallet_router
 
-@app.get('/')
+app = FastAPI(title="Velo Backend")
+
+
+@app.get("/")
 def root():
-    return {'status':'ok'}
+    return {"status": "ok"}
+
+
+app.include_router(wallet_router, prefix="/api/v1")
