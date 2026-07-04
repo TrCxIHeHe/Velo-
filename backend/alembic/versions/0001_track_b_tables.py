@@ -79,6 +79,7 @@ def upgrade() -> None:
     )
     op.create_index("idx_wallet_txn_wallet", "wallet_transactions", ["wallet_id"])
     op.create_index("idx_wallet_txn_reference", "wallet_transactions", ["reference_id"])
+    op.create_check_constraint("ck_wallet_txn_amount_positive", "wallet_transactions", "amount > 0")
 
     op.create_table(
         "rides",
@@ -101,6 +102,15 @@ def upgrade() -> None:
         sa.Column("event_type", sa.String(50), nullable=False),
         sa.Column("payload", sa.JSON),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+    )
+
+    op.create_table(
+        "vehicle_status",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("vehicle_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("vehicles.id"), nullable=False),
+        sa.Column("battery_pct", sa.Integer),
+        sa.Column("location", sa.JSON),
+        sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
     op.create_table(
@@ -143,7 +153,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     for table in [
-        "refresh_tokens", "audit_logs", "notifications", "ride_events", "rides",
+        "refresh_tokens", "audit_logs", "notifications", "vehicle_status", "ride_events", "rides",
         "wallet_transactions", "wallets", "dock_slots", "vehicles", "docks", "users",
     ]:
         op.drop_table(table)

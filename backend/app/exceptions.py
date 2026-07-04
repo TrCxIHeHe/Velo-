@@ -117,7 +117,7 @@ class InsufficientBalanceError(AppException):
         return "Wallet balance is insufficient for this operation."
 
 
-# ── Dock exceptions (Track B, used from Phase 3 onward) ──────────────────────
+# ── Dock exceptions (Track B) ────────────────────────────────────────────────
 
 class DockNotFoundError(AppException):
     code = "DOCK_NOT_FOUND"
@@ -141,3 +141,11 @@ class SlotOccupiedError(AppException):
 
     def _default_message(self) -> str:
         return "This dock slot is already occupied."
+
+
+class SlotNotFoundError(AppException):
+    code = "DOCK_SLOT_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Dock slot not found."

@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 
-from app.core.exceptions import InsufficientBalanceError, WalletNotFoundError
+from app.exceptions import InsufficientBalanceError, WalletNotFoundError
 from app.wallet.repository import WalletRepository
 from app.wallet.schemas import TransactionResponse, WalletResponse
 

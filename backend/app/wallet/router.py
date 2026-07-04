@@ -3,17 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppException
+from app.dependencies import get_current_user_id
+from app.exceptions import AppException
 from app.database import get_db
 from app.response import error_response, success_response
 from app.wallet.repository import WalletRepository
 from app.wallet.schemas import CreditRequest, DebitRequest, RefundRequest
 from app.wallet.service import WalletService
-
-# TODO: replace with real get_current_user dependency from app.auth once wired in
-def get_current_user_id() -> UUID:
-    raise NotImplementedError("Wire this to app.auth.dependencies.get_current_user")
-
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
