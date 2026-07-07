@@ -18,15 +18,8 @@ def get_dock_service(session: AsyncSession = Depends(get_db)) -> DockService:
     return DockService(DockRepository(session))
 
 
-# Reading dock/slot availability is public (riders need it on the map before
-# logging in to anything), so it does NOT require get_current_user_id.
-
 @router.get("")
-async def list_docks(
-    limit: int = 50,
-    offset: int = 0,
-    service: DockService = Depends(get_dock_service),
-):
+async def list_docks(limit: int = 50, offset: int = 0, service: DockService = Depends(get_dock_service)):
     try:
         docks = await service.list_docks(limit, offset)
         return success_response(docks)
@@ -35,21 +28,13 @@ async def list_docks(
 
 
 @router.get("/{dock_id}")
-async def get_dock(
-    dock_id: UUID,
-    service: DockService = Depends(get_dock_service),
-):
+async def get_dock(dock_id: UUID, service: DockService = Depends(get_dock_service)):
     try:
         dock = await service.get_dock(dock_id)
         return success_response(dock)
     except AppException as e:
         return error_response(e.code, e.message, e.http_status)
 
-
-# Mutating endpoints — creating docks and assigning/releasing vehicles — DO
-# require an authenticated caller (admin, in a real deployment). We reuse the
-# same dev auth stub as wallet for now; tighten to an admin-only check once
-# Track A's role-based auth exists.
 
 @router.post("", status_code=201)
 async def create_dock(

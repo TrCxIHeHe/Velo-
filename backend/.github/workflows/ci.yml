@@ -1,0 +1,48 @@
+# CI: runs the full Track B test suite on every push and pull request.
+#
+# WHY THIS MATTERS FOR A TWO-PERSON TEAM
+# ----------------------------------------
+# Track A and Track B share one repo. Without CI, a broken Track B commit
+# only gets discovered when Track A pulls latest and their local `pytest`
+# (or worse, their running app) breaks — at which point neither of you
+# knows immediately whose change caused it. This workflow runs on GitHub's
+# servers, fully independent of anyone's laptop, and blocks a PR from
+# looking "safe to merge" if the tests don't pass.
+#
+# Note this uses SQLite (see tests/conftest.py), not a real Postgres
+# service container — that's intentional, matching how the test suite
+# already runs locally with zero external dependencies. If Track B later
+# adds a test that specifically needs real Postgres behaviour (e.g. proving
+# SELECT FOR UPDATE actually blocks a concurrent transaction), add a
+# `services: postgres: ...` block to this job at that point.
+name: Track B CI
+
+on:
+  push:
+    branches: [main, "**track-b**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements/dev.txt
+
+      - name: Run tests
+        run: pytest -v
+
+      - name: Lint (ruff)
+        run: ruff check app tests
+        continue-on-error: true  # non-blocking for now — tighten once the codebase is ruff-clean

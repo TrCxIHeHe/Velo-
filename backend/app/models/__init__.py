@@ -12,16 +12,6 @@ from app.models.notification import Notification
 from app.models.audit_log import AuditLog
 
 __all__ = [
-    "User",
-    "RefreshToken",
-    "Wallet",
-    "WalletTransaction",
-    "Ride",
-    "RideEvent",
-    "Vehicle",
-    "Dock",
-    "DockSlot",
-    "VehicleStatus",
-    "Notification",
-    "AuditLog",
+    "User", "RefreshToken", "Wallet", "WalletTransaction", "Ride", "RideEvent",
+    "Vehicle", "Dock", "DockSlot", "VehicleStatus", "Notification", "AuditLog",
 ]

@@ -2,18 +2,16 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.dialects.postgresql import UUID
+from app.types import GUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
 class User(Base):
-    """Owned by Track A, but Track B's tables (wallets, rides, docks-adjacent
-    FKs) reference it, so it must exist for migrations to run."""
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     firebase_uid: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -28,9 +26,7 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
     )
 
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(  # noqa: F821
-        "RefreshToken", back_populates="user", lazy="select"
-    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship("RefreshToken", back_populates="user", lazy="select")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<User id={self.id} phone={self.phone_number} role={self.role}>"

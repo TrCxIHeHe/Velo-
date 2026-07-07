@@ -1,53 +1,8 @@
-"""
-Temporary development authentication for Track B.
+"""Temporary development authentication for Track B.
 
-WHY THIS FILE EXISTS
---------------------
-Every wallet/dock endpoint needs to know "which user is calling this?"
-That's Track A's job (Firebase login -> JWT access token -> decode it).
-Track A isn't finished/merged yet, but Track B can't sit idle waiting —
-so this file gives you a *fake but explicit* stand-in.
-
-Your original app/wallet/router.py had this instead:
-
-    def get_current_user_id() -> UUID:
-        raise NotImplementedError(...)
-
-which means EVERY wallet endpoint would 500 immediately, even after you
-fixed the file-placement problem and got migrations running. That is
-why nothing could actually be tested end-to-end last session.
-
-HOW IT WORKS RIGHT NOW (dev only)
-----------------------------------
-The caller sends a header:
-
-    X-Debug-User-Id: <any UUID>
-
-...and we trust it with zero verification. This is intentionally
-insecure. It exists purely so you can hit /api/v1/wallet endpoints
-with curl/Postman and prove the wallet logic works, without waiting
-on Track A.
-
-DO NOT deploy this anywhere reachable from the internet.
-
-WHEN TRACK A'S REAL AUTH LANDS
---------------------------------
-Replace the body of get_current_user_id with something like:
-
-    from fastapi import Depends
-    from fastapi.security import HTTPBearer
-    from app.core.jwt import JWTService  # Track A's module
-
-    bearer = HTTPBearer()
-
-    def get_current_user_id(creds = Depends(bearer)) -> uuid.UUID:
-        payload = JWTService().decode_access_token(creds.credentials)
-        return uuid.UUID(payload["sub"])
-
-Nothing in app/wallet/ or app/dock/ needs to change when you do this —
-they only import `get_current_user_id` from here and call it as a
-FastAPI dependency. Swap the implementation in one place, everything
-downstream keeps working.
+See setup.md section 5 for full context. Trusts an X-Debug-User-Id header
+with zero verification. Replace with real JWT decoding once Track A's
+auth is merged. Never deploy this outside your own machine.
 """
 import uuid
 
@@ -71,4 +26,22 @@ def get_current_user_id(
     except ValueError:
         raise HTTPException(
             status_code=401, detail="X-Debug-User-Id must be a valid UUID, e.g. 11111111-1111-1111-1111-111111111111"
+        )
+
+
+def require_admin(
+    x_debug_role: str | None = Header(default=None, alias="X-Debug-Role"),
+) -> None:
+    """Very thin dev-only admin gate for the Admin Dashboard endpoints.
+
+    Real deployments must replace this with a role claim decoded from the
+    JWT (Track A's `role` field on User — see docs/database/auth_schema.md).
+    For now, admin endpoints require the header `X-Debug-Role: ADMIN` in
+    addition to X-Debug-User-Id, so at least a stray script can't hit
+    fleet-wide stats by accident.
+    """
+    if x_debug_role != "ADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint requires X-Debug-Role: ADMIN (dev stub — replace with real role check).",
         )

@@ -2,22 +2,16 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Float, Integer, String
-from sqlalchemy.dialects.postgresql import UUID
+from app.types import GUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
 class Dock(Base):
-    """Location stored as plain lat/lng floats for MVP portability — this avoids
-    a PostGIS dependency in tests (SQLite has no geometry support) and matches
-    the "validate first, optimize later" principle from the architecture doc.
-    Swap `latitude`/`longitude` for a PostGIS Geography(POINT) column later if
-    proximity/radius queries need to happen at the DB level.
-    """
     __tablename__ = "docks"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)

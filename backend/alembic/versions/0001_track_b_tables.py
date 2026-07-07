@@ -39,6 +39,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    op.create_index("idx_docks_status", "docks", ["status"])
 
     op.create_table(
         "vehicles",
@@ -49,6 +50,8 @@ def upgrade() -> None:
         sa.Column("dock_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("docks.id")),
         sa.Column("last_seen_at", sa.DateTime(timezone=True)),
     )
+    op.create_index("idx_vehicles_status", "vehicles", ["status"])
+    op.create_index("idx_vehicles_dock_id", "vehicles", ["dock_id"])
 
     op.create_table(
         "dock_slots",
@@ -59,6 +62,7 @@ def upgrade() -> None:
         sa.Column("is_occupied", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("is_charging", sa.Boolean, nullable=False, server_default="false"),
     )
+    op.create_index("idx_dock_slots_dock_id", "dock_slots", ["dock_id"])
 
     op.create_table(
         "wallets",
@@ -79,6 +83,10 @@ def upgrade() -> None:
     )
     op.create_index("idx_wallet_txn_wallet", "wallet_transactions", ["wallet_id"])
     op.create_index("idx_wallet_txn_reference", "wallet_transactions", ["reference_id"])
+    # Amount is always positive; CREDIT/DEBIT/REFUND is encoded in `type`.
+    # This constraint is the DB-level backstop against a future bug that
+    # accidentally writes a negative debit (which would silently credit
+    # the wallet instead of debiting it).
     op.create_check_constraint("ck_wallet_txn_amount_positive", "wallet_transactions", "amount > 0")
 
     op.create_table(
@@ -94,6 +102,8 @@ def upgrade() -> None:
         sa.Column("end_at", sa.DateTime(timezone=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    op.create_index("idx_rides_user_id", "rides", ["user_id"])
+    op.create_index("idx_rides_status", "rides", ["status"])
 
     op.create_table(
         "ride_events",
@@ -103,6 +113,7 @@ def upgrade() -> None:
         sa.Column("payload", sa.JSON),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    op.create_index("idx_ride_events_ride_id", "ride_events", ["ride_id"])
 
     op.create_table(
         "vehicle_status",
@@ -112,6 +123,7 @@ def upgrade() -> None:
         sa.Column("location", sa.JSON),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    op.create_index("idx_vehicle_status_vehicle_id", "vehicle_status", ["vehicle_id"])
 
     op.create_table(
         "notifications",
@@ -123,6 +135,7 @@ def upgrade() -> None:
         sa.Column("sent_at", sa.DateTime(timezone=True)),
         sa.Column("read_at", sa.DateTime(timezone=True)),
     )
+    op.create_index("idx_notifications_user_id", "notifications", ["user_id"])
 
     op.create_table(
         "audit_logs",
@@ -134,6 +147,7 @@ def upgrade() -> None:
         sa.Column("payload", sa.JSON),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
+    op.create_index("idx_audit_logs_actor_id", "audit_logs", ["actor_id"])
 
     op.create_table(
         "refresh_tokens",

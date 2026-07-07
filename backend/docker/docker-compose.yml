@@ -1,2 +1,71 @@
-version: '3.9'
+# Local development / Oracle-Free-Tier deployment stack.
+#
+# WHY THESE THREE SERVICES
+# -------------------------
+# postgres — the real database. Running it in Docker (instead of installing
+#            Postgres natively like the earlier Windows session did) avoids
+#            the exact class of bugs that cost a whole evening last time:
+#            password URL-encoding issues, "which Postgres version is this",
+#            wrong port already in use, etc. `docker compose down -v` gives
+#            you a genuinely clean slate any time you want one.
+# backend  — this FastAPI app, built from docker/Dockerfile.
+# adminer  — a tiny web-based DB browser (like phpMyAdmin but for Postgres),
+#            so you can *see* your tables without installing psql or a GUI
+#            client. Open http://localhost:8080 after `docker compose up`.
+#
+# Redis and Mosquitto are intentionally NOT here yet — per the architecture
+# doc's own guidance ("Skip MQTT, Mosquitto, MinIO, Grafana, n8n... for the
+# first two phases"), Track B doesn't need them until real ride-token
+# caching or hardware integration begins. Add them here when that day comes.
+#
+# USAGE
+# -----
+#   cd backend/docker
+#   docker compose up -d          # start postgres + backend + adminer
+#   docker compose exec backend alembic upgrade head
+#   docker compose logs -f backend
+#   docker compose down           # stop everything, keep data
+#   docker compose down -v        # stop everything, WIPE the database too
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scooter_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/scooter_db
+      ENVIRONMENT: development
+      JWT_SECRET: dev_secret_change_before_deploy
+    ports:
+      - "8000:8000"
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

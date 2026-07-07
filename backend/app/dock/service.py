@@ -6,19 +6,6 @@ from app.exceptions import DockFullError, DockNotFoundError, SlotNotFoundError, 
 
 
 class DockService:
-    """Phase 1/3 scope: dock + slot CRUD and availability, matching the
-    dock/dock_slots tables Track B already owns in the DB schema.
-
-    NOT in scope yet (see TRACKB_SETUP_GUIDE.md "What's Next"):
-      - QR/unlock-token validation (that's the Ride Service's job, owned by
-        Track A, per docs/domain/ride_state_machine.md)
-      - Live hardware/MQTT status updates (Phase 3+, needs Mosquitto)
-
-    What IS in scope and done: creating docks with slots, listing docks,
-    checking per-dock availability, and assigning/releasing a vehicle to/from
-    a slot — the primitives every future ride-unlock flow will call into.
-    """
-
     def __init__(self, repo: DockRepository) -> None:
         self.repo = repo
 

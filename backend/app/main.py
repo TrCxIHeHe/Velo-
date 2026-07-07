@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.admin.router import router as admin_router
 from app.config import settings
 from app.dock.router import router as dock_router
 from app.wallet.router import router as wallet_router
@@ -19,3 +20,4 @@ def health():
 
 app.include_router(wallet_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dock_router, prefix=settings.API_V1_PREFIX)
+app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
