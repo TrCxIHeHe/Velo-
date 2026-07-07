@@ -44,4 +44,18 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-google-services.json
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+
+.env
+.env.*
+!.env.example
+
+__pycache__/
+.venv/
+venv/
+
+ios/Pods/
+ios/.symlinks/

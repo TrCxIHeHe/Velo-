@@ -17,48 +17,79 @@ abstract final class AppRoutes {
 
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
+
   return GoRouter(
     initialLocation: AppRoutes.splash,
     refreshListenable: notifier,
     redirect: (context, state) {
-    final auth = ref.read(authNotifierProvider);
-    final loc = state.matchedLocation;
+      // Use the snapshot captured by _RouterNotifier so redirect is
+      // always evaluated against the latest auth state.
+      final auth = notifier.authState;
+      final loc = state.matchedLocation;
 
-    if (auth is AuthInitial || auth is AuthLoading) {
-      return loc == AppRoutes.splash ? null : AppRoutes.splash;
-    }
-
-    if (auth is AuthUnauthenticated || auth is AuthError) {
-      return loc == AppRoutes.login ? null : AppRoutes.login;
-    }
-
-    if (auth is AuthAuthenticated) {
-      final hasName = auth.user.name != null;
-
-      if (loc == AppRoutes.login || loc == AppRoutes.splash) {
-        return hasName
-            ? AppRoutes.profile
-            : AppRoutes.onboarding;
+      // While session check is in progress, stay on splash.
+      if (auth is AuthInitial || auth is AuthLoading) {
+        return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
-      if (!hasName && loc != AppRoutes.onboarding) {
-        return AppRoutes.onboarding;
+      // Not authenticated — go to login.
+      if (auth is AuthUnauthenticated || auth is AuthError) {
+        return loc == AppRoutes.login ? null : AppRoutes.login;
       }
-    }
 
-    return null;
-},
+      // Authenticated.
+      if (auth is AuthAuthenticated) {
+        final hasName = auth.user.name != null && auth.user.name!.isNotEmpty;
+
+        // Redirect away from auth screens.
+        if (loc == AppRoutes.splash || loc == AppRoutes.login) {
+          return hasName ? AppRoutes.profile : AppRoutes.onboarding;
+        }
+
+        // Force onboarding if name missing and not already there.
+        if (!hasName && loc != AppRoutes.onboarding) {
+          return AppRoutes.onboarding;
+        }
+
+        // Name set — don't let user linger on onboarding.
+        if (hasName && loc == AppRoutes.onboarding) {
+          return AppRoutes.profile;
+        }
+      }
+
+      return null;
+    },
     routes: [
-      GoRoute(path: AppRoutes.splash, builder: (_, __) => const SplashScreen()),
-      GoRoute(path: AppRoutes.login, builder: (_, __) => const LoginScreen()),
-      GoRoute(path: AppRoutes.onboarding, builder: (_, __) => const OnboardingScreen()),
-      GoRoute(path: AppRoutes.profile, builder: (_, __) => const ProfileScreen()),
+      GoRoute(
+        path: AppRoutes.splash,
+        builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (_, __) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.onboarding,
+        builder: (_, __) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profile,
+        builder: (_, __) => const ProfileScreen(),
+      ),
     ],
   );
 });
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
-    ref.listen(authNotifierProvider, (_, __) => notifyListeners());
+    // Watch auth state — every change triggers GoRouter to re-evaluate redirect.
+    ref.listen<AuthState>(authNotifierProvider, (_, next) {
+      authState = next;
+      notifyListeners();
+    });
+    // Capture initial state so redirect has a value before first change.
+    authState = ref.read(authNotifierProvider);
   }
+
+  late AuthState authState;
 }
