@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     FIREBASE_PROJECT_ID: str = "your-project-id"
     FIREBASE_SERVICE_ACCOUNT_PATH: str = "./firebase-service-account.json"
 
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Ride Token (QR)
+    RIDE_TOKEN_SECRET: str = "dev_ride_secret_change_before_deploy"
+    RIDE_TOKEN_ALGORITHM: str = "HS256"
+    RIDE_TOKEN_TTL_SECONDS: int = 30
+    VEHICLE_BATTERY_MIN_THRESHOLD: int = 20
+
     # App
     ENVIRONMENT: str = "development"
     API_V1_PREFIX: str = "/api/v1"

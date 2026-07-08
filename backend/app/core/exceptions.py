@@ -99,3 +99,87 @@ class UserNotFoundError(AppException):
 
     def _default_message(self) -> str:
         return "User not found."
+
+
+# ── Ride exceptions ──────────────────────────────────────────────────────────
+
+class RideTokenGenerationError(AppException):
+    """Redis unavailable or jti collision could not be resolved."""
+
+    code = "RIDE_TOKEN_UNAVAILABLE"
+    http_status = 503
+
+    def _default_message(self) -> str:
+        return "Could not generate ride token. Try again."
+
+
+class RideTokenInvalidError(AppException):
+    code = "RIDE_TOKEN_INVALID"
+    http_status = 401
+
+    def _default_message(self) -> str:
+        return "Ride token is invalid or malformed."
+
+
+class RideTokenExpiredError(AppException):
+    code = "RIDE_TOKEN_EXPIRED"
+    http_status = 401
+
+    def _default_message(self) -> str:
+        return "Ride token has expired."
+
+
+class RideTokenReusedError(AppException):
+    code = "RIDE_TOKEN_REUSED"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "Ride token has already been used."
+
+
+class RideAlreadyActiveError(AppException):
+    code = "RIDE_ALREADY_ACTIVE"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "You already have an active ride."
+
+
+class RideNotFoundError(AppException):
+    code = "RIDE_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Ride not found."
+
+
+class RideInvalidStateError(AppException):
+    code = "RIDE_INVALID_STATE"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "Ride is not in a valid state for this operation."
+
+
+class RideForbiddenError(AppException):
+    code = "RIDE_FORBIDDEN"
+    http_status = 403
+
+    def _default_message(self) -> str:
+        return "You do not own this ride."
+
+
+class DockMismatchError(AppException):
+    code = "RIDE_DOCK_MISMATCH"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "This ride token was not issued for this dock."
+
+
+class VehicleUnavailableError(AppException):
+    code = "VEHICLE_UNAVAILABLE"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "No vehicle is currently available for assignment."

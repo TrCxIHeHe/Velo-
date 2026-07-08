@@ -7,6 +7,8 @@ from app.auth.router import router as auth_router
 from app.config import settings
 from app.core.exceptions import AppException
 from app.core.response import error_response, success_response
+from app.dock.router import router as dock_router
+from app.ride.router import router as ride_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +40,8 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(ride_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(dock_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

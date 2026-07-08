@@ -2,6 +2,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock
 
+import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -9,15 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.auth.dependencies import get_auth_service
 from app.core.firebase import get_firebase_service
+from app.core.redis import get_redis_client
 from app.database import Base, get_db
 from app.main import app
-from app.models import User  # noqa: F401 — register models
+from app import models  # noqa: F401 — registers every model on Base.metadata
+from app.models import User
 
 # ── In-memory SQLite engine for tests ────────────────────────────────────────
 
+from sqlalchemy.pool import StaticPool
+
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+test_engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=StaticPool)
 TestSessionFactory = async_sessionmaker(
     test_engine, class_=AsyncSession, expire_on_commit=False
 )
@@ -59,12 +64,23 @@ def firebase_mock():
     return make_firebase_mock()
 
 
+# ── Fake Redis ────────────────────────────────────────────────────────────────
+
+@pytest_asyncio.fixture
+async def fake_redis() -> AsyncGenerator:
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    yield client
+    await client.flushall()
+    await client.aclose()
+
+
 # ── HTTP test client ──────────────────────────────────────────────────────────
 
 @pytest_asyncio.fixture
-async def client(firebase_mock) -> AsyncGenerator[AsyncClient, None]:
+async def client(firebase_mock, fake_redis) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_firebase_service] = lambda: firebase_mock
+    app.dependency_overrides[get_redis_client] = lambda: fake_redis
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -96,3 +112,13 @@ async def existing_user(db_session: AsyncSession) -> User:
     db_session.add(user)
     await db_session.commit()
     return user
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client: AsyncClient) -> dict:
+    """Logs in via the real /auth/login flow, returns a ready Bearer header."""
+    response = await client.post(
+        "/api/v1/auth/login", json={"firebase_id_token": MOCK_UID}
+    )
+    token = response.json()["data"]["access_token"]
+    return {"Authorization": f"Bearer {token}"}

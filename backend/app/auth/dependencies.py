@@ -5,6 +5,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit.repository import AuditLogRepository
 from app.auth.repository import RefreshTokenRepository, UserRepository
 from app.auth.service import AuthService
 from app.core.exceptions import ForbiddenError, InvalidTokenError, TokenExpiredError
@@ -28,6 +29,10 @@ def get_token_repo(session: DbSession) -> RefreshTokenRepository:
     return RefreshTokenRepository(session)
 
 
+def get_audit_repo(session: DbSession) -> AuditLogRepository:
+    return AuditLogRepository(session)
+
+
 # ── Core Services (stateless singletons) ─────────────────────────────────────
 
 def get_jwt_service() -> JWTService:
@@ -41,8 +46,9 @@ def get_auth_service(
     token_repo: Annotated[RefreshTokenRepository, Depends(get_token_repo)],
     firebase: Annotated[FirebaseService, Depends(get_firebase_service)],
     jwt: Annotated[JWTService, Depends(get_jwt_service)],
+    audit_repo: Annotated[AuditLogRepository, Depends(get_audit_repo)],
 ) -> AuthService:
-    return AuthService(user_repo, token_repo, firebase, jwt)
+    return AuthService(user_repo, token_repo, firebase, jwt, audit_repo)
 
 
 # ── Route Protection ──────────────────────────────────────────────────────────

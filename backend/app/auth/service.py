@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from app.audit.repository import AuditLogRepository
 from app.auth.repository import RefreshTokenRepository, UserRepository
 from app.auth.schemas import SessionResponse, TokenPairResponse, UserResponse
 from app.config import settings
@@ -41,11 +42,13 @@ class AuthService:
         token_repo: RefreshTokenRepository,
         firebase: FirebaseService,
         jwt: JWTService,
+        audit_repo: AuditLogRepository,
     ) -> None:
         self.user_repo = user_repo
         self.token_repo = token_repo
         self.firebase = firebase
         self.jwt = jwt
+        self.audit_repo = audit_repo
 
     # ── Login ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +75,8 @@ class AuthService:
         family_id = uuid.uuid4()
         expires_at = _utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         await self.token_repo.create(user.id, hash_token(raw_refresh), expires_at, family_id)
+
+        await self.audit_repo.log(user.id, "USER_LOGIN", "user", str(user.id))
 
         return SessionResponse(
             access_token=access_token,
@@ -111,6 +116,7 @@ class AuthService:
         )
 
         access_token = self.jwt.create_access_token(user.id, user.role)
+        await self.audit_repo.log(user.id, "TOKEN_REFRESH", "refresh_token", str(record.id))
         return TokenPairResponse(access_token=access_token, refresh_token=raw_new)
 
     # ── Logout ────────────────────────────────────────────────────────────────
@@ -125,6 +131,7 @@ class AuthService:
         record = await self.token_repo.find_by_hash(token_hash)
         if record and not record.revoked:
             await self.token_repo.revoke(record.id)
+            await self.audit_repo.log(record.user_id, "USER_LOGOUT", "refresh_token", str(record.id))
 
     # ── Profile ───────────────────────────────────────────────────────────────
 
