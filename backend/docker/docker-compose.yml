@@ -1,0 +1,89 @@
+# Local development / Oracle-Free-Tier deployment stack.
+#
+# WHY THESE SERVICES
+# -------------------
+# postgres — the real database. Running it in Docker (instead of installing
+#            Postgres natively like the earlier Windows session did) avoids
+#            the exact class of bugs that cost a whole evening last time:
+#            password URL-encoding issues, "which Postgres version is this",
+#            wrong port already in use, etc. `docker compose down -v` gives
+#            you a genuinely clean slate any time you want one.
+# redis    — ride-token (QR) one-time-use storage and OTP rate limiting
+#            (Track A). Not optional once auth/ride are merged in.
+# backend  — this FastAPI app, built from docker/Dockerfile.
+# adminer  — a tiny web-based DB browser (like phpMyAdmin but for Postgres),
+#            so you can *see* your tables without installing psql or a GUI
+#            client. Open http://localhost:8080 after `docker compose up`.
+#
+# Mosquitto (hardware/MQTT) is intentionally still not here — per the
+# architecture doc's own guidance, that's a Phase 3 hardware concern,
+# not MVP.
+#
+# USAGE
+# -----
+#   cd backend/docker
+#   docker compose up -d          # start postgres + redis + backend + adminer
+#   docker compose exec backend alembic upgrade head
+#   docker compose logs -f backend
+#   docker compose down           # stop everything, keep data
+#   docker compose down -v        # stop everything, WIPE the database too
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scooter_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/scooter_db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      JWT_SECRET: dev_secret_change_before_deploy
+      RIDE_TOKEN_SECRET: dev_ride_secret_change_before_deploy
+    volumes:
+      - ../firebase-service-account.json:/app/firebase-service-account.json:ro
+    ports:
+      - "8000:8000"
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

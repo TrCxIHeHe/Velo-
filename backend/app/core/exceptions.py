@@ -183,3 +183,71 @@ class VehicleUnavailableError(AppException):
 
     def _default_message(self) -> str:
         return "No vehicle is currently available for assignment."
+
+
+# ── Wallet exceptions (Track B) ──────────────────────────────────────────────
+
+class WalletNotFoundError(AppException):
+    code = "WALLET_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Wallet not found."
+
+
+class InsufficientBalanceError(AppException):
+    code = "WALLET_INSUFFICIENT_BALANCE"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "Wallet balance is insufficient for this operation."
+
+
+class InvalidTransactionAmountError(AppException):
+    code = "WALLET_INVALID_AMOUNT"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "Transaction amount must be greater than zero."
+
+
+class DuplicateReferenceError(AppException):
+    code = "WALLET_DUPLICATE_REFERENCE"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "A transaction with this reference_id already exists."
+
+
+# ── Dock exceptions (Track B) ────────────────────────────────────────────────
+
+class DockNotFoundError(AppException):
+    code = "DOCK_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Dock not found."
+
+
+class DockFullError(AppException):
+    code = "DOCK_FULL"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "This dock has no available slots."
+
+
+class SlotOccupiedError(AppException):
+    code = "DOCK_SLOT_OCCUPIED"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "This dock slot is already occupied."
+
+
+class SlotNotFoundError(AppException):
+    code = "DOCK_SLOT_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Dock slot not found."

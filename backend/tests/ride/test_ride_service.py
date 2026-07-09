@@ -27,7 +27,8 @@ async def fake_redis():
     client = fakeredis.aioredis.FakeRedis(decode_responses=True)
     yield client
     await client.flushall()
-    await client.aclose()
+    close = getattr(client, "aclose", None) or client.close
+    await close()
 
 
 @pytest.fixture

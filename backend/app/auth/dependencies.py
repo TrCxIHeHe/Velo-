@@ -14,7 +14,7 @@ from app.core.jwt import JWTService
 from app.database import get_db
 from app.models.user import User
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # ── Database & Repositories ───────────────────────────────────────────────────
 
@@ -54,12 +54,20 @@ def get_auth_service(
 # ── Route Protection ──────────────────────────────────────────────────────────
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     user_repo: Annotated[UserRepository, Depends(get_user_repo)],
     jwt: Annotated[JWTService, Depends(get_jwt_service)],
 ) -> User:
-    """Decode JWT and return the active User. Raises 401/403 on any failure."""
+    """Decode JWT and return the active User. Raises 401 on any failure —
+    missing, malformed, invalid, or expired token — per common.md's
+    frozen contract (all three cases are specified as 401 Unauthorized)."""
     from fastapi import HTTPException
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "AUTH_INVALID_TOKEN", "message": "Missing bearer token."},
+        )
 
     try:
         payload = jwt.decode_access_token(credentials.credentials)
@@ -100,3 +108,17 @@ def require_role(role: str):
 
 
 RequireAdmin = Annotated[User, Depends(require_role("ADMIN"))]
+
+
+# ── Compatibility adapters for Track B routers (wallet/dock/admin) ───────────
+# These modules were built against a temporary dev-only stub
+# (app.dependencies.get_current_user_id / require_admin, header-based, no
+# verification). This wiring replaces that stub with the real auth flow above
+# without changing any wallet/dock/admin business logic.
+
+async def get_current_user_id(current_user: CurrentUser) -> uuid.UUID:
+    return current_user.id
+
+
+async def require_admin(admin_user: RequireAdmin) -> None:
+    return None
