@@ -1,18 +1,21 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_providers.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_state.dart';
 import 'package:scooter/features/auth/presentation/screens/login_screen.dart';
 import 'package:scooter/features/auth/presentation/screens/onboarding_screen.dart';
-import 'package:scooter/features/auth/presentation/screens/profile_screen.dart';
 import 'package:scooter/features/auth/presentation/screens/splash_screen.dart';
+import 'package:scooter/features/home/presentation/screens/home_screen.dart';
 
 abstract final class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String onboarding = '/onboarding';
-  static const String profile = '/profile';
+  // /profile is retired as a top-level route — it lives inside HomeScreen tab.
+  // Keep the constant so any stale string references resolve without error.
+  static const String profile = '/home';
+  static const String home = '/home';
 }
 
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
@@ -22,12 +25,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.splash,
     refreshListenable: notifier,
     redirect: (context, state) {
-      // Use the snapshot captured by _RouterNotifier so redirect is
-      // always evaluated against the latest auth state.
       final auth = notifier.authState;
       final loc = state.matchedLocation;
 
-      // While session check is in progress, stay on splash.
+      // Session check in progress — hold on splash.
       if (auth is AuthInitial || auth is AuthLoading) {
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
@@ -41,19 +42,19 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       if (auth is AuthAuthenticated) {
         final hasName = auth.user.name != null && auth.user.name!.isNotEmpty;
 
-        // Redirect away from auth screens.
+        // Redirect away from auth-only screens.
         if (loc == AppRoutes.splash || loc == AppRoutes.login) {
-          return hasName ? AppRoutes.profile : AppRoutes.onboarding;
+          return hasName ? AppRoutes.home : AppRoutes.onboarding;
         }
 
-        // Force onboarding if name missing and not already there.
+        // Force onboarding if name missing.
         if (!hasName && loc != AppRoutes.onboarding) {
           return AppRoutes.onboarding;
         }
 
-        // Name set — don't let user linger on onboarding.
+        // Name set — don't stay on onboarding.
         if (hasName && loc == AppRoutes.onboarding) {
-          return AppRoutes.profile;
+          return AppRoutes.home;
         }
       }
 
@@ -73,8 +74,8 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const OnboardingScreen(),
       ),
       GoRoute(
-        path: AppRoutes.profile,
-        builder: (_, __) => const ProfileScreen(),
+        path: AppRoutes.home,
+        builder: (_, __) => const HomeScreen(),
       ),
     ],
   );
@@ -82,12 +83,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(Ref ref) {
-    // Watch auth state — every change triggers GoRouter to re-evaluate redirect.
     ref.listen<AuthState>(authNotifierProvider, (_, next) {
       authState = next;
       notifyListeners();
     });
-    // Capture initial state so redirect has a value before first change.
     authState = ref.read(authNotifierProvider);
   }
 

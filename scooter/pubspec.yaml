@@ -17,6 +17,13 @@ dependencies:
   firebase_auth: ^5.5.2
   flutter_secure_storage: ^9.2.4
 
+  # QR generation — encode ride_token string as QR image
+  qr_flutter: ^4.1.0
+
+  # Map — OpenStreetMap tiles via flutter_map (matches architecture doc)
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
