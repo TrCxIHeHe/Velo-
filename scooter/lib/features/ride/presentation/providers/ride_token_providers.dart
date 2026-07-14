@@ -1,25 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scooter/core/errors/app_exception.dart';
-import 'package:scooter/features/auth/presentation/providers/auth_providers.dart';
-import 'package:scooter/features/ride/data/ride_remote_datasource.dart';
-import 'package:scooter/features/ride/data/ride_repository_impl.dart';
+import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/ride_repository.dart';
+import 'package:scooter/features/ride/presentation/providers/active_ride_providers.dart';
+import 'package:scooter/features/ride/presentation/providers/ride_repository_providers.dart';
 import 'package:scooter/features/ride/presentation/providers/ride_token_state.dart';
 
-final Provider<RideRemoteDataSource> rideDataSourceProvider =
-    Provider<RideRemoteDataSource>(
-  (ref) => RideRemoteDataSource(ref.watch(dioProvider)),
-);
-
-final Provider<RideRepository> rideRepositoryProvider =
-    Provider<RideRepository>(
-  (ref) => RideRepositoryImpl(ref.watch(rideDataSourceProvider)),
-);
+export 'package:scooter/features/ride/presentation/providers/ride_repository_providers.dart';
 
 class RideTokenNotifier extends StateNotifier<RideTokenState> {
-  RideTokenNotifier(this._repo) : super(const RideTokenInitial());
+  RideTokenNotifier(this._repo, this._activeRide) : super(const RideTokenInitial());
 
   final RideRepository _repo;
+  final ActiveRideNotifier _activeRide;
 
   /// Full flow: request ride (ignore RIDE_ALREADY_ACTIVE), then issue token.
   /// Call this on QR screen mount and on the "Get QR" button.
@@ -63,10 +56,17 @@ class RideTokenNotifier extends StateNotifier<RideTokenState> {
 
   Future<void> _requestRideIgnoringActiveConflict() async {
     try {
-      await _repo.requestRide();
+      final ride = await _repo.requestRide();
+      // Hand the fresh ride_id to the tracking notifier — this is the only
+      // point the client ever learns it, since no GET /ride/active exists.
+      await _activeRide.adopt(ride);
     } on ApiException catch (e) {
       // RIDE_ALREADY_ACTIVE means user already has an ASSIGNED ride.
-      // That's fine — we'll issue a token for it.
+      // That's fine for issuing a token — but we did NOT get a ride_id here.
+      // If ActiveRideNotifier already has one persisted (e.g. this is the
+      // same session that created it), tracking still works. If storage
+      // was cleared, there is no backend endpoint to recover the id — see
+      // missing-endpoint note in ride_repository.dart.
       if (e.code != 'RIDE_ALREADY_ACTIVE') rethrow;
     }
   }
@@ -75,5 +75,8 @@ class RideTokenNotifier extends StateNotifier<RideTokenState> {
 final StateNotifierProvider<RideTokenNotifier, RideTokenState>
     rideTokenNotifierProvider =
     StateNotifierProvider<RideTokenNotifier, RideTokenState>(
-  (ref) => RideTokenNotifier(ref.watch(rideRepositoryProvider)),
+  (ref) => RideTokenNotifier(
+    ref.watch(rideRepositoryProvider),
+    ref.watch(activeRideNotifierProvider.notifier),
+  ),
 );

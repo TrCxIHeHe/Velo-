@@ -14,7 +14,8 @@ abstract final class ApiConstants {
   static const String wallet = '/wallet';
   static const String walletTransactions = '/wallet/transactions';
 
-  // Ride — Track A Phase 2
+  // Ride — Track A Phase 2/3
+  static const String rideBase = '/ride';
   static const String rideRequest = '/ride/request';
   static const String rideToken = '/ride/token';
 

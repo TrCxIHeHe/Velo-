@@ -26,6 +26,20 @@ class SecureStorageService {
     await Future.wait([
       _storage.delete(key: StorageKeys.accessToken),
       _storage.delete(key: StorageKeys.refreshToken),
+      _storage.delete(key: StorageKeys.activeRideId),
     ]);
   }
+
+  // ── Active ride resumption ──────────────────────────────────────────────
+  // No GET /ride/active endpoint exists. This is the only way the tracking
+  // screen can recover a ride_id after the app is killed and relaunched.
+
+  Future<void> saveActiveRideId(String rideId) =>
+      _storage.write(key: StorageKeys.activeRideId, value: rideId);
+
+  Future<String?> getActiveRideId() =>
+      _storage.read(key: StorageKeys.activeRideId);
+
+  Future<void> clearActiveRideId() =>
+      _storage.delete(key: StorageKeys.activeRideId);
 }

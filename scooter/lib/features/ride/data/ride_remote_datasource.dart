@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:scooter/core/constants/api_constants.dart';
 import 'package:scooter/core/errors/app_exception.dart';
+import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/models/ride_token.dart';
 
 class RideRemoteDataSource {
@@ -9,10 +10,11 @@ class RideRemoteDataSource {
   final Dio _dio;
 
   /// POST /api/v1/ride/request
-  /// 201 on success. 409 if ride already active (RIDE_ALREADY_ACTIVE).
-  Future<void> requestRide() async {
+  /// 201 with full RideResponse. 409 if already active (RIDE_ALREADY_ACTIVE).
+  Future<Ride> requestRide() async {
     try {
-      await _dio.post(ApiConstants.rideRequest);
+      final r = await _dio.post(ApiConstants.rideRequest);
+      return Ride.fromJson(r.data['data'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _map(e);
     }
@@ -24,6 +26,26 @@ class RideRemoteDataSource {
     try {
       final r = await _dio.post(ApiConstants.rideToken);
       return RideToken.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  /// GET /api/v1/ride/{ride_id} — full ride record.
+  Future<Ride> getRide(String rideId) async {
+    try {
+      final r = await _dio.get('${ApiConstants.rideBase}/$rideId');
+      return Ride.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  /// GET /api/v1/ride/status/{ride_id} — cheap poll, id + status only.
+  Future<String> getRideStatus(String rideId) async {
+    try {
+      final r = await _dio.get('${ApiConstants.rideBase}/status/$rideId');
+      return (r.data['data'] as Map<String, dynamic>)['status'] as String;
     } on DioException catch (e) {
       throw _map(e);
     }
