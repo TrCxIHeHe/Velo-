@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     WALLET_DEFAULT_CURRENCY: str = "INR"
     WALLET_MIN_RIDE_BALANCE: int = 20
 
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    RIDE_TOKEN_SECRET: str = "dev_ride_secret_change_before_deploy"
+    RIDE_TOKEN_ALGORITHM: str = "HS256"
+    RIDE_TOKEN_TTL_SECONDS: int = 30
+    VEHICLE_BATTERY_MIN_THRESHOLD: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

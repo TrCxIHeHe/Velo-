@@ -32,7 +32,6 @@ Phase 5. Specifically:
 
 | Area | What changed | Why |
 |---|---|---|
-| **Dependency versions** | Bumped `python-multipart`, `orjson`, `python-dotenv`, `pytest` in `requirements/` | GitHub Dependabot flagged known CVEs in the pinned versions — see §2.3 |
 | **Test suite** | Added — 38 tests across wallet, dock, and admin | Nothing was previously codified as "this must never break" |
 | **Wallet idempotency** | Added `DuplicateReferenceError` + a per-wallet reference-id check | Prevents double-charging a user if a client retries a request |
 | **Wallet row locking** | `debit()` now takes a row lock (`SELECT ... FOR UPDATE`) on Postgres | Prevents two concurrent ride-end requests from both reading a stale balance |
@@ -117,41 +116,6 @@ targets to reference. Run it once after every `alembic upgrade head` /
 database reset, before you touch any endpoint manually.
 
 ---
-
-### 2.3 Dependabot alerts on `requirements/base.txt` and `requirements/dev.txt`
-
-GitHub's Dependabot scanned the last push and flagged several CVEs in
-pinned versions — mostly in `python-multipart` (a transitive dependency
-FastAPI uses for form/file uploads, which Track B doesn't currently use
-directly but ships anyway as part of `requirements/base.txt`), plus one
-each in `orjson`, `python-dotenv`, and `pytest`. None of these were
-exploited or exploitable in anything Track B actually calls today — the
-multipart issues are all about parsing multipart form uploads and
-querystrings, which no current endpoint accepts — but pinning known-
-vulnerable versions is still a real finding worth fixing immediately
-rather than leaving open, since any future endpoint that *does* accept
-file uploads would inherit the exposure silently.
-
-**Fix:** bumped to the latest patched release of each:
-
-| Package | Old | New |
-|---|---|---|
-| `python-multipart` | 0.0.20 | 0.0.32 |
-| `orjson` | 3.11.1 | 3.11.9 |
-| `python-dotenv` | 1.1.1 | 1.2.2 |
-| `pytest` (dev) | 8.4.1 | 8.4.2 |
-
-After bumping, I reinstalled (`pip install -r requirements/dev.txt -U`)
-and reran the full 38-test suite plus `ruff check` — everything still
-passes with zero code changes required, since none of these were breaking
-API changes for how this codebase uses them.
-
-**What to do:** pull the updated `requirements/base.txt` and
-`requirements/dev.txt` from this delivery, reinstall
-(`pip install -r requirements\dev.txt` from `backend/`, venv active), and
-the Dependabot alerts should clear on your next push. If Dependabot opened
-its own PRs for these (it does that automatically), you can close them
-once you've merged this delivery's version bumps — no need to merge both.
 
 ## 3. The test suite — what it is, how to run it, what it does and doesn't prove
 

@@ -1,77 +1,78 @@
-from uuid import UUID
+import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import CurrentUser, require_role
+from app.core.exceptions import AppException
+from app.core.response import error_response, success_response
 from app.database import get_db
-from app.dependencies import get_current_user_id
-from app.dock.repository import DockRepository
-from app.dock.schemas import AssignVehicleRequest, CreateDockRequest
+from app.dock.repository import DockRepository, VehicleRepository
+from app.dock.schemas import DockCreate, DockUpdate, VehicleCreate, VehicleStatusUpdate
 from app.dock.service import DockService
-from app.exceptions import AppException
-from app.response import error_response, success_response
 
-router = APIRouter(prefix="/docks", tags=["dock"])
+router = APIRouter(prefix="/docks", tags=["docks"])
+
+RequireAdmin = Annotated[None, Depends(require_role("ADMIN"))]
 
 
-def get_dock_service(session: AsyncSession = Depends(get_db)) -> DockService:
-    return DockService(DockRepository(session))
+def get_dock_service(session: Annotated[AsyncSession, Depends(get_db)]) -> DockService:
+    return DockService(DockRepository(session), VehicleRepository(session))
+
+
+DockServiceDep = Annotated[DockService, Depends(get_dock_service)]
 
 
 @router.get("")
-async def list_docks(limit: int = 50, offset: int = 0, service: DockService = Depends(get_dock_service)):
-    try:
-        docks = await service.list_docks(limit, offset)
-        return success_response(docks)
-    except AppException as e:
-        return error_response(e.code, e.message, e.http_status)
+async def list_docks(service: DockServiceDep, _: CurrentUser, active_only: bool = True):
+    docks = await service.list_docks(active_only)
+    return success_response([d.model_dump() for d in docks])
 
 
 @router.get("/{dock_id}")
-async def get_dock(dock_id: UUID, service: DockService = Depends(get_dock_service)):
+async def get_dock(dock_id: uuid.UUID, service: DockServiceDep, _: CurrentUser):
     try:
         dock = await service.get_dock(dock_id)
-        return success_response(dock)
-    except AppException as e:
-        return error_response(e.code, e.message, e.http_status)
+        return success_response(dock.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
 
 
-@router.post("", status_code=201)
-async def create_dock(
-    body: CreateDockRequest,
-    _user_id: UUID = Depends(get_current_user_id),
-    service: DockService = Depends(get_dock_service),
-):
+@router.post("", dependencies=[Depends(require_role("ADMIN"))])
+async def create_dock(body: DockCreate, service: DockServiceDep):
+    dock = await service.create_dock(body)
+    return success_response(dock.model_dump(), status_code=201)
+
+
+@router.patch("/{dock_id}", dependencies=[Depends(require_role("ADMIN"))])
+async def update_dock(dock_id: uuid.UUID, body: DockUpdate, service: DockServiceDep):
     try:
-        dock = await service.create_dock(body.name, body.latitude, body.longitude, body.total_slots)
-        return success_response(dock, status_code=201)
-    except AppException as e:
-        return error_response(e.code, e.message, e.http_status)
+        dock = await service.update_dock(dock_id, body)
+        return success_response(dock.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
 
 
-@router.post("/{dock_id}/assign")
-async def assign_vehicle(
-    dock_id: UUID,
-    body: AssignVehicleRequest,
-    _user_id: UUID = Depends(get_current_user_id),
-    service: DockService = Depends(get_dock_service),
-):
+@router.get("/vehicles/all", dependencies=[Depends(require_role("ADMIN"))])
+async def list_vehicles(service: DockServiceDep, skip: int = 0, limit: int = 100):
+    vehicles = await service.list_vehicles(skip, limit)
+    return success_response([v.model_dump() for v in vehicles])
+
+
+@router.post("/vehicles", dependencies=[Depends(require_role("ADMIN"))])
+async def add_vehicle(body: VehicleCreate, service: DockServiceDep):
     try:
-        slot = await service.assign_vehicle(dock_id, body.vehicle_id)
-        return success_response(slot, status_code=201)
-    except AppException as e:
-        return error_response(e.code, e.message, e.http_status)
+        vehicle = await service.add_vehicle(body)
+        return success_response(vehicle.model_dump(), status_code=201)
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
 
 
-@router.post("/{dock_id}/slots/{slot_id}/release")
-async def release_vehicle(
-    dock_id: UUID,
-    slot_id: UUID,
-    _user_id: UUID = Depends(get_current_user_id),
-    service: DockService = Depends(get_dock_service),
-):
+@router.patch("/vehicles/{vehicle_id}", dependencies=[Depends(require_role("ADMIN"))])
+async def update_vehicle(vehicle_id: uuid.UUID, body: VehicleStatusUpdate, service: DockServiceDep):
     try:
-        slot = await service.release_vehicle(dock_id, slot_id)
-        return success_response(slot)
-    except AppException as e:
-        return error_response(e.code, e.message, e.http_status)
+        vehicle = await service.update_vehicle(vehicle_id, body)
+        return success_response(vehicle.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
