@@ -1,24 +1,12 @@
-import uuid
-from datetime import datetime
+"""
+Compatibility shim.
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
-from app.types import GUID
-from sqlalchemy.orm import Mapped, mapped_column
+Vehicle was consolidated into app.models.dock alongside Dock and DockSlot
+so all three ORM classes share the same module and relationship declarations.
 
-from app.database import Base
+Any code that does `from app.models.vehicle import Vehicle`
+continues to work via this re-export.
+"""
+from app.models.dock import Vehicle  # noqa: F401
 
-
-class Vehicle(Base):
-    __tablename__ = "vehicles"
-
-    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    qr_code: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="AVAILABLE", index=True)
-    battery_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    dock_id: Mapped[uuid.UUID | None] = mapped_column(
-        GUID, ForeignKey("docks.id"), nullable=True, index=True
-    )
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    def __repr__(self) -> str:
-        return f"<Vehicle id={self.id} status={self.status}>"
+__all__ = ["Vehicle"]

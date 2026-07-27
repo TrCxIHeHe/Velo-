@@ -1,85 +1,60 @@
 import uuid
-from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ride import Ride
-from app.models.vehicle import Vehicle
-
-ACTIVE_RIDE_STATUSES = ("REQUESTED", "ASSIGNED", "UNLOCK_PENDING", "ACTIVE", "END_PENDING")
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class RideRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def find_active_for_user(self, user_id: uuid.UUID) -> Ride | None:
-        result = await self.session.execute(
-            select(Ride).where(Ride.user_id == user_id, Ride.status.in_(ACTIVE_RIDE_STATUSES))
-        )
-        return result.scalar_one_or_none()
+    async def create(self, user_id: uuid.UUID, start_dock_id: uuid.UUID, jti: str) -> Ride:
+        ride = Ride(user_id=user_id, start_dock_id=start_dock_id, ride_token_jti=jti, status="PENDING")
+        self.session.add(ride)
+        await self.session.flush()
+        return ride
 
     async def find_by_id(self, ride_id: uuid.UUID) -> Ride | None:
         result = await self.session.execute(select(Ride).where(Ride.id == ride_id))
         return result.scalar_one_or_none()
 
-    async def create_assigned(
-        self, user_id: uuid.UUID, vehicle_id: uuid.UUID, dock_start_id: uuid.UUID
-    ) -> Ride:
-        """Ride enters the table already ASSIGNED.
-
-        No queue/matching worker in scope — REQUESTED as its own persisted
-        row would be a dangling state nobody advances. Vehicle availability
-        checked synchronously before this call; row only ever persisted
-        once assignment is guaranteed. RideEvent still records a synthetic
-        REQUESTED entry for audit continuity.
-        """
-        ride = Ride(user_id=user_id, vehicle_id=vehicle_id, dock_start_id=dock_start_id, status="ASSIGNED")
-        self.session.add(ride)
-        await self.session.flush()
-        return ride
-
-    async def update_status(self, ride_id: uuid.UUID, status: str, **fields) -> Ride:
-        ride = await self.find_by_id(ride_id)
-        ride.status = status
-        for key, value in fields.items():
-            setattr(ride, key, value)
-        await self.session.flush()
-        return ride
-
-
-class VehicleRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-
-    async def find_available_for_assignment(self, min_battery: int) -> Vehicle | None:
-        """Row-locked so two concurrent ride requests can't grab the same
-        vehicle. No-op lock on SQLite tests, fully effective on Postgres."""
+    async def find_active_for_user(self, user_id: uuid.UUID) -> Ride | None:
         result = await self.session.execute(
-            select(Vehicle)
-            .where(
-                Vehicle.status == "AVAILABLE",
-                Vehicle.dock_id.is_not(None),
-                Vehicle.battery_pct.is_not(None),
-                Vehicle.battery_pct >= min_battery,
-            )
-            .order_by(Vehicle.last_seen_at.desc().nullslast())
-            .limit(1)
-            .with_for_update()
+            select(Ride).where(Ride.user_id == user_id, Ride.status.in_(["PENDING", "ACTIVE"]))
         )
         return result.scalar_one_or_none()
 
-    async def find_by_id(self, vehicle_id: uuid.UUID) -> Vehicle | None:
-        result = await self.session.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    async def find_by_jti(self, jti: str) -> Ride | None:
+        result = await self.session.execute(select(Ride).where(Ride.ride_token_jti == jti))
         return result.scalar_one_or_none()
 
-    async def update_status(self, vehicle_id: uuid.UUID, status: str) -> Vehicle:
-        vehicle = await self.find_by_id(vehicle_id)
-        vehicle.status = status
+    async def update(self, ride_id: uuid.UUID, **kwargs) -> Ride | None:
+        await self.session.execute(update(Ride).where(Ride.id == ride_id).values(**kwargs))
         await self.session.flush()
-        return vehicle
+        return await self.find_by_id(ride_id)
+
+    async def list_for_user(
+        self, user_id: uuid.UUID, skip: int = 0, limit: int = 20
+    ) -> tuple[list[Ride], int]:
+        count_result = await self.session.execute(
+            select(func.count()).where(Ride.user_id == user_id)
+        )
+        total = count_result.scalar_one()
+        result = await self.session.execute(
+            select(Ride)
+            .where(Ride.user_id == user_id)
+            .order_by(Ride.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars()), total
+
+    async def list_all(self, skip: int = 0, limit: int = 50) -> tuple[list[Ride], int]:
+        count_result = await self.session.execute(select(func.count(Ride.id)))
+        total = count_result.scalar_one()
+        result = await self.session.execute(
+            select(Ride).order_by(Ride.created_at.desc()).offset(skip).limit(limit)
+        )
+        return list(result.scalars()), total

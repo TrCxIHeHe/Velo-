@@ -9,11 +9,8 @@
 # servers, fully independent of anyone's laptop, and blocks a PR from
 # looking "safe to merge" if the tests don't pass.
 #
-# PYTHON VERSION: pinned to 3.11 here and in backend/docker/Dockerfile, to
-# match. All current dependencies support 3.10+ (verified against PyPI
-# metadata), so local dev on 3.10 also works -- 3.11 is just the version
-# CI and the Docker image standardize on for reproducibility. See
-# CHANGE_LOG.md for the reasoning on why 3.11 was chosen over 3.12.
+# PYTHON VERSION: pinned to 3.12 here and in backend/docker/Dockerfile, to
+# match.
 #
 # KNOWN GAP: this uses SQLite (see backend/tests/conftest.py), not a real
 # Postgres service container. That's intentional for now, matching how the
@@ -22,7 +19,7 @@
 # DockRepository) is never actually exercised under real Postgres
 # concurrency here. A `services: postgres: ...` block plus a dedicated
 # concurrency test must be added before this is trusted for a pilot with
-# real money moving through the wallet ledger -- see FULL_SYSTEM_REPORT.md.
+# real money moving through the wallet ledger.
 name: Backend CI
 
 on:
@@ -38,19 +35,32 @@ jobs:
       run:
         working-directory: backend
 
+    env:
+      JWT_SECRET: test_secret
+      RIDE_TOKEN_SECRET: test_ride_secret
+      FIREBASE_PROJECT_ID: test-project
+      FIREBASE_SERVICE_ACCOUNT_PATH: /dev/null
+      ENVIRONMENT: test
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements/dev.txt
 
       - name: Run tests
-        run: pytest -v
+        run: pytest -v --cov=app --cov-report=xml
 
       - name: Lint (ruff)
         run: ruff check app tests
         continue-on-error: true  # non-blocking for now -- tighten once the codebase is ruff-clean
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: false

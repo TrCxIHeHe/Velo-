@@ -11,15 +11,18 @@ class AuditLogRepository:
 
     async def log(
         self,
-        actor_id: uuid.UUID | None,
+        user_id: uuid.UUID | None,
         action: str,
-        entity_type: str,
-        entity_id: str,
-        payload: dict | None = None,
+        resource_type: str,
+        resource_id: str | None = None,
+        meta: str | None = None,
     ) -> AuditLog:
         entry = AuditLog(
-            actor_id=actor_id, action=action, entity_type=entity_type,
-            entity_id=entity_id, payload=payload,
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            meta=meta,
         )
         self.session.add(entry)
         await self.session.flush()

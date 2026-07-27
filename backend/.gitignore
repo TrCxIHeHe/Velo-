@@ -1,8 +1,15 @@
 __pycache__/
-*.pyc
-.pytest_cache/
+*.py[cod]
+*.pyo
 .env
 firebase-service-account.json
 *.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+*.log
 .venv/
 venv/
