@@ -1,5 +1,6 @@
 import uuid
 
+from app.audit.repository import AuditLogRepository
 from app.config import settings
 from app.core.exceptions import (
     DuplicateReferenceError, InsufficientBalanceError,
@@ -10,8 +11,13 @@ from app.wallet.schemas import TransactionListResponse, TransactionResponse, Wal
 
 
 class WalletService:
-    def __init__(self, wallet_repo: WalletRepository) -> None:
+    def __init__(self, wallet_repo: WalletRepository, audit_repo: AuditLogRepository | None = None) -> None:
         self.wallet_repo = wallet_repo
+        self.audit_repo = audit_repo
+
+    async def _audit(self, actor_id: uuid.UUID | None, action: str, wallet_id: uuid.UUID, meta: str) -> None:
+        if self.audit_repo is not None:
+            await self.audit_repo.log(actor_id, action, "wallet", str(wallet_id), meta)
 
     async def _get_or_create_wallet(self, user_id: uuid.UUID):
         wallet = await self.wallet_repo.find_by_user_id(user_id)
@@ -43,6 +49,7 @@ class WalletService:
             wallet.id, "CREDIT", "TOPUP", amount, new_balance, reference_id
         )
         wallet.balance = new_balance
+        await self._audit(user_id, "WALLET_TOPUP", wallet.id, f"amount={amount} reference_id={reference_id}")
         return WalletResponse.model_validate(wallet)
 
     async def debit_for_ride(
@@ -65,10 +72,12 @@ class WalletService:
             reference_id=f"ride:{ride_id}", note=f"Fare for ride {ride_id}"
         )
         wallet.balance = new_balance
+        await self._audit(user_id, "WALLET_DEBIT_RIDE_FARE", wallet.id, f"amount={amount} ride_id={ride_id}")
         return WalletResponse.model_validate(wallet)
 
     async def admin_adjust(
-        self, user_id: uuid.UUID, amount: float, note: str | None, reference_id: str | None
+        self, user_id: uuid.UUID, amount: float, note: str | None, reference_id: str | None,
+        actor_id: uuid.UUID | None = None,
     ) -> WalletResponse:
         if amount == 0:
             raise InvalidTransactionAmountError()
@@ -92,6 +101,10 @@ class WalletService:
             wallet.id, txn_type, "ADMIN_ADJUSTMENT", abs(amount), new_balance, reference_id, note
         )
         wallet.balance = new_balance
+        await self._audit(
+            actor_id or user_id, "WALLET_ADMIN_ADJUST", wallet.id,
+            f"target_user={user_id} amount={amount} note={note}",
+        )
         return WalletResponse.model_validate(wallet)
 
     async def check_sufficient_for_ride(self, user_id: uuid.UUID) -> bool:

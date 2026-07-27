@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -41,7 +41,10 @@ class WalletTransaction(Base):
     source: TOPUP | RIDE_FARE | REFUND | ADMIN_ADJUSTMENT
     """
     __tablename__ = "wallet_transactions"
-    __table_args__ = (UniqueConstraint("reference_id", name="uq_wallet_txn_reference"),)
+    __table_args__ = (
+        UniqueConstraint("reference_id", name="uq_wallet_txn_reference"),
+        CheckConstraint("amount > 0", name="ck_wallet_txn_amount_positive"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         GUID, primary_key=True, default=uuid.uuid4,

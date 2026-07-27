@@ -4,13 +4,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from app.admin.router import router as admin_router
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.core.exceptions import AppException
+from app.core.rate_limit import limiter
 from app.core.response import error_response, success_response
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.dock.router import router as dock_router
+from app.notifications.router import router as notifications_router
+from app.payments.router import router as payments_router
 from app.ride.router import router as ride_router
 from app.wallet.router import router as wallet_router
 
@@ -34,12 +39,24 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # CORS_ORIGINS="*" is dev-only shorthand. Wildcard origin + credentialed
+    # requests is a spec violation browsers reject anyway, so credentials are
+    # only enabled once real origins are configured.
+    origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    is_wildcard = origins == ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # tighten per-env in production
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=not is_wildcard,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    app.state.limiter = limiter
+    app.add_exception_handler(
+        RateLimitExceeded,
+        lambda request, exc: error_response("RATE_LIMITED", "Too many requests. Try again shortly.", 429),
     )
 
     # ── Global exception handlers ───────────────────────────────────────────────
@@ -71,6 +88,8 @@ def create_app() -> FastAPI:
     app.include_router(dock_router, prefix=settings.API_V1_PREFIX)
     app.include_router(wallet_router, prefix=settings.API_V1_PREFIX)
     app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(payments_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

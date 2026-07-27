@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth.dependencies import CurrentUser, get_auth_service
 from app.auth.schemas import (
@@ -11,6 +11,7 @@ from app.auth.schemas import (
 )
 from app.auth.service import AuthService
 from app.core.exceptions import AppException
+from app.core.rate_limit import limiter
 from app.core.response import error_response, success_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -25,11 +26,15 @@ def _handle_app_exception(exc: AppException):
 # ── POST /auth/login ──────────────────────────────────────────────────────────
 
 @router.post("/login")
-async def login(body: LoginRequest, service: AuthServiceDep):
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginRequest, service: AuthServiceDep):
     """Exchange a Firebase ID token for an access + refresh token pair.
 
     The phone number is extracted from the Firebase token server-side.
     The client must never send the phone number directly.
+
+    Rate limited to 5/min per IP — this is the endpoint an attacker would
+    hammer to brute-force OTP/Firebase tokens or enumerate accounts.
     """
     try:
         session = await service.login(body.firebase_id_token)

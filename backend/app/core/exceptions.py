@@ -251,3 +251,21 @@ class SlotNotFoundError(AppException):
 
     def _default_message(self) -> str:
         return "Dock slot not found."
+
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+
+class PaymentGatewayNotConfiguredError(AppException):
+    code = "PAYMENT_GATEWAY_NOT_CONFIGURED"
+    http_status = 503
+
+    def _default_message(self) -> str:
+        return "Payment gateway is not configured on this server."
+
+
+class InvalidWebhookSignatureError(AppException):
+    code = "PAYMENT_INVALID_WEBHOOK_SIGNATURE"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "Webhook signature verification failed."

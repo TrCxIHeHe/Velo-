@@ -12,7 +12,8 @@ from app.admin.repository import (
 )
 from app.admin.schemas import SetUserActiveRequest, SetUserRoleRequest
 from app.admin.service import AdminService
-from app.auth.dependencies import require_role
+from app.audit.repository import AuditLogRepository
+from app.auth.dependencies import CurrentUser, require_role
 from app.core.exceptions import AppException
 from app.core.response import error_response, success_response
 from app.database import get_db
@@ -26,6 +27,7 @@ def get_admin_service(session: Annotated[AsyncSession, Depends(get_db)]) -> Admi
         AdminUserRepository(session),
         AdminAuditRepository(session),
         AdminRideRepository(session),
+        AuditLogRepository(session),
     )
 
 
@@ -89,18 +91,22 @@ async def get_user(user_id: uuid.UUID, service: AdminServiceDep):
 
 
 @router.patch("/users/{user_id}/role")
-async def set_user_role(user_id: uuid.UUID, body: SetUserRoleRequest, service: AdminServiceDep):
+async def set_user_role(
+    user_id: uuid.UUID, body: SetUserRoleRequest, admin_user: CurrentUser, service: AdminServiceDep
+):
     try:
-        user = await service.set_role(user_id, body.role)
+        user = await service.set_role(user_id, body.role, actor_id=admin_user.id)
         return success_response(user.model_dump())
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)
 
 
 @router.patch("/users/{user_id}/active")
-async def set_user_active(user_id: uuid.UUID, body: SetUserActiveRequest, service: AdminServiceDep):
+async def set_user_active(
+    user_id: uuid.UUID, body: SetUserActiveRequest, admin_user: CurrentUser, service: AdminServiceDep
+):
     try:
-        user = await service.set_active(user_id, body.is_active)
+        user = await service.set_active(user_id, body.is_active, actor_id=admin_user.id)
         return success_response(user.model_dump())
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)

@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     RIDE_TOKEN_TTL_SECONDS: int = 30
     VEHICLE_BATTERY_MIN_THRESHOLD: int = 20
 
+    # CORS — comma-separated origin list. "*" only ever makes sense in dev;
+    # main.py refuses to combine it with allow_credentials=True.
+    CORS_ORIGINS: str = "*"
+
+    # Razorpay
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
+    # Firebase Cloud Messaging
+    FCM_ENABLED: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

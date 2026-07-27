@@ -21,6 +21,7 @@ from app.core.exceptions import (
     RideTokenReusedError, VehicleUnavailableError,
 )
 from app.dock.repository import DockRepository, VehicleRepository
+from app.notifications.service import NotificationService
 from app.ride.repository import RideRepository
 from app.ride.schemas import RideListResponse, RideResponse, RideTokenResponse
 from app.wallet.service import WalletService
@@ -51,12 +52,18 @@ class RideService:
         vehicle_repo: VehicleRepository,
         wallet_service: WalletService,
         audit_repo: AuditLogRepository,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self.ride_repo = ride_repo
         self.dock_repo = dock_repo
         self.vehicle_repo = vehicle_repo
         self.wallet_service = wallet_service
         self.audit_repo = audit_repo
+        self.notification_service = notification_service
+
+    async def _notify(self, user_id: uuid.UUID, type_: str, title: str, body: str) -> None:
+        if self.notification_service is not None:
+            await self.notification_service.notify(user_id, type_, title, body)
 
     async def request_ride_token(self, user_id: uuid.UUID, dock_id: uuid.UUID) -> RideTokenResponse:
         # Check no active ride
@@ -149,6 +156,10 @@ class RideService:
             started_at=_utcnow(),
         )
         await self.audit_repo.log(ride.user_id, "RIDE_STARTED", "ride", str(ride.id))
+        await self._notify(
+            ride.user_id, "RIDE_START", "Ride started",
+            "Your ride has started. Have a safe trip!",
+        )
         return RideResponse.model_validate(ride)
 
     async def end_ride(self, user_id: uuid.UUID, ride_id: uuid.UUID, end_dock_id: uuid.UUID) -> RideResponse:
@@ -195,6 +206,17 @@ class RideService:
             fare_amount=fare,
         )
         await self.audit_repo.log(user_id, "RIDE_ENDED", "ride", str(ride.id), meta=f"fare={fare}")
+        await self._notify(
+            user_id, "RIDE_END", "Ride completed",
+            f"Your ride has ended. Fare charged: ₹{fare:.2f}.",
+        )
+
+        wallet = await self.wallet_service.get_balance(user_id)
+        if wallet.balance < settings.WALLET_MIN_RIDE_BALANCE:
+            await self._notify(
+                user_id, "LOW_BALANCE", "Low wallet balance",
+                f"Your wallet balance is ₹{wallet.balance:.2f}. Top up to keep riding.",
+            )
         return RideResponse.model_validate(ride)
 
     async def get_ride(self, user_id: uuid.UUID, ride_id: uuid.UUID) -> RideResponse:

@@ -7,6 +7,7 @@ from app.admin.repository import (
     AdminRideRepository,
     AdminUserRepository,
 )
+from app.audit.repository import AuditLogRepository
 from app.admin.schemas import (
     AuditLogListResponse,
     AuditLogResponse,
@@ -28,11 +29,13 @@ class AdminService:
         user_repo: AdminUserRepository,
         audit_repo: AdminAuditRepository,
         ride_repo: AdminRideRepository,
+        audit_write_repo: AuditLogRepository | None = None,
     ) -> None:
         self.stats_repo = stats_repo
         self.user_repo = user_repo
         self.audit_repo = audit_repo
         self.ride_repo = ride_repo
+        self.audit_write_repo = audit_write_repo
 
     # ── Dashboard / fleet / revenue stats ───────────────────────────────────────
 
@@ -92,16 +95,26 @@ class AdminService:
             raise UserNotFoundError()
         return UserResponse.model_validate(user)
 
-    async def set_role(self, user_id: uuid.UUID, role: str) -> UserResponse:
+    async def set_role(self, user_id: uuid.UUID, role: str, actor_id: uuid.UUID | None = None) -> UserResponse:
         user = await self.user_repo.set_role(user_id, role)
         if not user:
             raise UserNotFoundError()
+        if self.audit_write_repo is not None:
+            await self.audit_write_repo.log(
+                actor_id, "ADMIN_SET_USER_ROLE", "user", str(user_id), f"role={role}"
+            )
         return UserResponse.model_validate(user)
 
-    async def set_active(self, user_id: uuid.UUID, is_active: bool) -> UserResponse:
+    async def set_active(
+        self, user_id: uuid.UUID, is_active: bool, actor_id: uuid.UUID | None = None
+    ) -> UserResponse:
         user = await self.user_repo.set_active(user_id, is_active)
         if not user:
             raise UserNotFoundError()
+        if self.audit_write_repo is not None:
+            await self.audit_write_repo.log(
+                actor_id, "ADMIN_SET_USER_ACTIVE", "user", str(user_id), f"is_active={is_active}"
+            )
         return UserResponse.model_validate(user)
 
     # ── Audit logs ───────────────────────────────────────────────────────────────

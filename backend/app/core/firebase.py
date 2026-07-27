@@ -4,6 +4,7 @@ from functools import lru_cache
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
+from firebase_admin import messaging
 
 from app.config import settings
 from app.core.exceptions import InvalidFirebaseTokenError, MissingPhoneNumberError
@@ -55,6 +56,24 @@ class FirebaseService:
             "uid": decoded["uid"],
             "phone_number": phone_number,
         }
+
+    def send_push(self, fcm_token: str, title: str, body: str) -> bool:
+        """Best-effort FCM push. Returns False (never raises) on any failure —
+        a dead/rotated device token or Firebase outage must never break the
+        ride/wallet flow that triggered the notification."""
+        if not settings.FCM_ENABLED:
+            return False
+        try:
+            _init_firebase_app()
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                token=fcm_token,
+            )
+            messaging.send(message)
+            return True
+        except Exception as exc:  # noqa: BLE001 — deliberately broad, see docstring
+            logger.warning("FCM push failed: %s", exc)
+            return False
 
 
 @lru_cache(maxsize=1)

@@ -1,15 +1,19 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.repository import AuditLogRepository
 from app.auth.dependencies import CurrentUser
 from app.core.exceptions import AppException
+from app.core.firebase import FirebaseService, get_firebase_service
+from app.core.rate_limit import limiter
 from app.core.response import error_response, success_response
 from app.database import get_db
 from app.dock.repository import DockRepository, VehicleRepository
+from app.notifications.repository import NotificationRepository, UserDeviceRepository
+from app.notifications.service import NotificationService
 from app.ride.repository import RideRepository
 from app.ride.schemas import ConfirmRideRequest, EndRideRequest, RequestRideTokenRequest
 from app.ride.service import RideService
@@ -19,13 +23,17 @@ from app.wallet.service import WalletService
 router = APIRouter(prefix="/rides", tags=["rides"])
 
 
-def get_ride_service(session: Annotated[AsyncSession, Depends(get_db)]) -> RideService:
+def get_ride_service(
+    session: Annotated[AsyncSession, Depends(get_db)],
+    firebase: Annotated[FirebaseService, Depends(get_firebase_service)],
+) -> RideService:
     return RideService(
         RideRepository(session),
         DockRepository(session),
         VehicleRepository(session),
-        WalletService(WalletRepository(session)),
+        WalletService(WalletRepository(session), AuditLogRepository(session)),
         AuditLogRepository(session),
+        NotificationService(NotificationRepository(session), UserDeviceRepository(session), firebase),
     )
 
 
@@ -33,7 +41,10 @@ RideServiceDep = Annotated[RideService, Depends(get_ride_service)]
 
 
 @router.post("/token")
-async def request_ride_token(body: RequestRideTokenRequest, current_user: CurrentUser, service: RideServiceDep):
+@limiter.limit("3/minute")
+async def request_ride_token(
+    request: Request, body: RequestRideTokenRequest, current_user: CurrentUser, service: RideServiceDep
+):
     try:
         result = await service.request_ride_token(current_user.id, body.dock_id)
         return success_response(result.model_dump(), status_code=201)
