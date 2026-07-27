@@ -64,6 +64,11 @@ behind it at all.** That's fine for dev/testing (and is what the test suite uses
 "free money" hole if left reachable in production — gate it behind `require_role("ADMIN")` or
 remove it before a real pilot with real money.
 
+> **Update:** `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` are intentionally
+> left blank for now — no real Razorpay account is wired up yet. `/payments/orders` and the webhook
+> will keep returning `503 PAYMENT_GATEWAY_NOT_CONFIGURED` until those are set; this is expected and
+> not a bug.
+
 ## Security posture
 
 - **Auth**: Firebase-verified phone login → 15-min JWT access tokens + 30-day single-use, rotated
