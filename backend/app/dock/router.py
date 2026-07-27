@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import CurrentUser, require_role
+from app.auth.dependencies import require_role
 from app.core.exceptions import AppException
 from app.core.response import error_response, success_response
 from app.database import get_db
@@ -14,8 +14,6 @@ from app.dock.service import DockService
 
 router = APIRouter(prefix="/docks", tags=["docks"])
 
-RequireAdmin = Annotated[None, Depends(require_role("ADMIN"))]
-
 
 def get_dock_service(session: Annotated[AsyncSession, Depends(get_db)]) -> DockService:
     return DockService(DockRepository(session), VehicleRepository(session))
@@ -24,20 +22,26 @@ def get_dock_service(session: Annotated[AsyncSession, Depends(get_db)]) -> DockS
 DockServiceDep = Annotated[DockService, Depends(get_dock_service)]
 
 
+# ── Public endpoints (no auth) ────────────────────────────────────────────────
+
 @router.get("")
-async def list_docks(service: DockServiceDep, _: CurrentUser, active_only: bool = True):
+async def list_docks(service: DockServiceDep, active_only: bool = True):
+    """List active docks. Public — needed by the Flutter map before login."""
     docks = await service.list_docks(active_only)
     return success_response([d.model_dump() for d in docks])
 
 
 @router.get("/{dock_id}")
-async def get_dock(dock_id: uuid.UUID, service: DockServiceDep, _: CurrentUser):
+async def get_dock(dock_id: uuid.UUID, service: DockServiceDep):
+    """Dock detail with slot availability. Public."""
     try:
         dock = await service.get_dock(dock_id)
         return success_response(dock.model_dump())
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)
 
+
+# ── Admin-only endpoints ──────────────────────────────────────────────────────
 
 @router.post("", dependencies=[Depends(require_role("ADMIN"))])
 async def create_dock(body: DockCreate, service: DockServiceDep):

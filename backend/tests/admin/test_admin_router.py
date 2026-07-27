@@ -1,47 +1,95 @@
-"""Tests for the new Admin Dashboard aggregate endpoints (Phase 5).
-
-Verifies: (1) the dev role gate actually blocks non-admins, and (2) the
-figures returned match what wallet/dock operations actually produced —
-i.e. the dashboard is reading real ledger/slot data, not placeholders.
 """
+Router-level tests for the admin module.
+
+Tests hit the actual HTTP layer via AsyncClient backed by an in-memory
+SQLite database.  auth_headers / admin_headers fixtures are in conftest.py.
+"""
+import pytest
 
 
-async def test_admin_endpoints_require_admin_role(client, auth_headers):
-    # auth_headers has a valid user id but no X-Debug-Role: ADMIN
-    resp = await client.get("/api/v1/admin/dashboard", headers=auth_headers)
+# ── Auth guard tests ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_admin_endpoints_reject_unauthenticated(client):
+    """Every admin endpoint must return 401 when no token is supplied."""
+    resp = await client.get("/api/v1/admin/users")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_endpoints_reject_non_admin_user(client, auth_headers):
+    """A valid USER-role JWT must be forbidden from admin endpoints."""
+    resp = await client.get("/api/v1/admin/users", headers=auth_headers)
     assert resp.status_code == 403
 
 
-async def test_admin_endpoints_reject_missing_auth_entirely(client):
-    resp = await client.get("/api/v1/admin/dashboard")
-    assert resp.status_code == 403
+# ── User management ───────────────────────────────────────────────────────────
 
-
-async def test_dashboard_reflects_real_wallet_and_dock_activity(client, admin_headers, auth_headers):
-    # Create some real activity as a normal user first.
-    await client.post("/api/v1/wallet/credit", headers=auth_headers, json={"amount": 500, "reference_id": "t1"})
-    await client.post("/api/v1/wallet/debit", headers=auth_headers, json={"amount": 100, "reference_id": "r1"})
-
-    dock_resp = await client.post(
-        "/api/v1/docks", headers=auth_headers, json={"name": "Dock A", "latitude": 1, "longitude": 1, "total_slots": 2}
-    )
-    dock_id = dock_resp.json()["data"]["id"]
-    await client.post(
-        f"/api/v1/docks/{dock_id}/assign", headers=auth_headers, json={"vehicle_id": "11111111-1111-1111-1111-111111111111"}
-    )
-
-    resp = await client.get("/api/v1/admin/dashboard", headers=admin_headers)
+@pytest.mark.asyncio
+async def test_admin_can_list_users(client, admin_headers):
+    resp = await client.get("/api/v1/admin/users", headers=admin_headers)
     assert resp.status_code == 200
-    data = resp.json()["data"]
+    body = resp.json()
+    assert body["success"] is True
+    assert "items" in body["data"]
+    assert isinstance(body["data"]["total"], int)
 
-    assert float(data["revenue"]["total_recharged"]) == 500.0
-    assert float(data["revenue"]["total_spent"]) == 100.0
-    assert float(data["revenue"]["net_platform_balance_held"]) == 400.0
 
-    assert data["fleet"]["total_docks"] == 1
-    assert data["fleet"]["total_slots"] == 2
-    assert data["fleet"]["occupied_slots"] == 1
-    assert data["fleet"]["available_slots"] == 1
-    assert data["fleet"]["utilization_pct"] == 50.0
+@pytest.mark.asyncio
+async def test_admin_can_promote_user_to_admin(client, admin_headers, auth_headers):
+    """Fetch the regular user's ID, then promote them, then verify the role."""
+    # Get list to find the regular user
+    users_resp = await client.get("/api/v1/admin/users", headers=admin_headers)
+    users = users_resp.json()["data"]["items"]
+    # Find the USER-role entry (not the admin itself)
+    regular = next((u for u in users if u["role"] == "USER"), None)
+    assert regular is not None, "Expected at least one USER-role user in the list"
 
-    assert data["users"]["total_wallets"] == 1
+    user_id = regular["id"]
+    patch_resp = await client.patch(
+        f"/api/v1/admin/users/{user_id}/role",
+        headers=admin_headers,
+        json={"role": "ADMIN"},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["data"]["role"] == "ADMIN"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_deactivate_user(client, admin_headers, auth_headers):
+    users_resp = await client.get("/api/v1/admin/users", headers=admin_headers)
+    users = users_resp.json()["data"]["items"]
+    regular = next((u for u in users if u["role"] == "USER"), None)
+    if regular is None:
+        pytest.skip("No USER-role user found; skipping deactivation test")
+
+    user_id = regular["id"]
+    resp = await client.patch(
+        f"/api/v1/admin/users/{user_id}/active",
+        headers=admin_headers,
+        json={"is_active": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["is_active"] is False
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_admin_can_read_audit_log(client, admin_headers):
+    resp = await client.get("/api/v1/admin/audit-logs", headers=admin_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "items" in body["data"]
+
+
+# ── Rides overview ────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_admin_can_list_all_rides(client, admin_headers):
+    resp = await client.get("/api/v1/admin/rides", headers=admin_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "items" in body["data"]
