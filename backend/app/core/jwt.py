@@ -24,7 +24,7 @@ class JWTService:
             "iat": now,
             "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         }
-        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+        return jwt.encode(payload, settings.JWT_PRIVATE_KEY, algorithm=settings.JWT_ALGORITHM)
 
     def decode_access_token(self, token: str) -> dict:
         """Returns payload dict with 'sub' (user_id str) and 'role'.
@@ -34,7 +34,7 @@ class JWTService:
         try:
             payload = jwt.decode(
                 token,
-                settings.JWT_SECRET,
+                settings.JWT_PUBLIC_KEY,
                 algorithms=[settings.JWT_ALGORITHM],
             )
             if payload.get("type") != "access":

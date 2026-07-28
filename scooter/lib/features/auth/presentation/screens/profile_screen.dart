@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scooter/core/theme/theme_mode_controller.dart';
+import 'package:scooter/core/widgets/app_button.dart';
 import 'package:scooter/features/auth/domain/models/user.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_providers.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_state.dart';
@@ -14,6 +16,7 @@ class ProfileScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final User user = state.user;
+    final themeMode = ref.watch(themeModeProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -45,15 +48,24 @@ class ProfileScreen extends ConsumerWidget {
           _Tile(icon: Icons.phone_outlined, label: 'Phone', value: user.phoneNumber),
           const Divider(),
           _Tile(icon: Icons.badge_outlined, label: 'Role', value: user.role),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text('Appearance', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 8),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.brightness_auto)),
+              ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+              ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ],
+            selected: {themeMode},
+            onSelectionChanged: (selection) =>
+                ref.read(themeModeProvider.notifier).setThemeMode(selection.first),
+          ),
           const SizedBox(height: 40),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.logout),
-            label: const Text('Log out'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-              side: BorderSide(color: Theme.of(context).colorScheme.error),
-              minimumSize: const Size(double.infinity, 48),
-            ),
+          DangerOutlineButton(
+            label: 'Log out',
+            icon: Icons.logout,
             onPressed: () => _confirmLogout(context, ref),
           ),
         ],
@@ -66,7 +78,7 @@ class ProfileScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Log out'),
-        content: const Text('Are you sure?'),
+        content: const Text('Are you sure you want to log out?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -100,9 +112,7 @@ class _Tile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline)),
+              Text(label, style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 2),
               Text(value, style: Theme.of(context).textTheme.bodyLarge),
             ],

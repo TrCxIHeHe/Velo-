@@ -50,12 +50,14 @@ class RefreshTokenRepository:
         token_hash: str,
         expires_at: datetime,
         family_id: uuid.UUID,
+        device_id: str | None = None,
     ) -> RefreshToken:
         record = RefreshToken(
             user_id=user_id,
             token_hash=token_hash,
             expires_at=expires_at,
             family_id=family_id,
+            device_id=device_id,
         )
         self.session.add(record)
         await self.session.flush()

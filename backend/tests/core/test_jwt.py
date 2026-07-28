@@ -27,7 +27,7 @@ class TestCreateAccessToken:
     def test_payload_contains_sub_and_role(self, jwt_service, user_id):
         from app.config import settings
         token = jwt_service.create_access_token(user_id, "ADMIN")
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.JWT_ALGORITHM])
         assert payload["sub"] == str(user_id)
         assert payload["role"] == "ADMIN"
         assert payload["type"] == "access"
@@ -35,7 +35,7 @@ class TestCreateAccessToken:
     def test_token_has_expiry(self, jwt_service, user_id):
         from app.config import settings
         token = jwt_service.create_access_token(user_id, "USER")
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.JWT_ALGORITHM])
         assert "exp" in payload
         assert payload["exp"] > time.time()
 
@@ -67,6 +67,6 @@ class TestDecodeAccessToken:
             "type": "refresh",  # wrong
             "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
         }
-        token = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+        token = jwt.encode(payload, settings.JWT_PRIVATE_KEY, algorithm=settings.JWT_ALGORITHM)
         with pytest.raises(InvalidTokenError):
             jwt_service.decode_access_token(token)

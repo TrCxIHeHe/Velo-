@@ -52,7 +52,7 @@ class AuthService:
 
     # ── Login ─────────────────────────────────────────────────────────────────
 
-    async def login(self, firebase_id_token: str) -> SessionResponse:
+    async def login(self, firebase_id_token: str, device_id: str | None = None) -> SessionResponse:
         # 1. Verify Firebase token. phone_number comes from the token claim —
         #    never from client input. Raises on invalid/expired token.
         verified = self.firebase.verify_id_token(firebase_id_token)
@@ -74,7 +74,9 @@ class AuthService:
         raw_refresh = generate_raw_token()
         family_id = uuid.uuid4()
         expires_at = _utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        await self.token_repo.create(user.id, hash_token(raw_refresh), expires_at, family_id)
+        await self.token_repo.create(
+            user.id, hash_token(raw_refresh), expires_at, family_id, device_id=device_id
+        )
 
         await self.audit_repo.log(user.id, "USER_LOGIN", "user", str(user.id))
 
@@ -86,7 +88,7 @@ class AuthService:
 
     # ── Refresh ───────────────────────────────────────────────────────────────
 
-    async def refresh(self, raw_refresh_token: str) -> TokenPairResponse:
+    async def refresh(self, raw_refresh_token: str, device_id: str | None = None) -> TokenPairResponse:
         token_hash = hash_token(raw_refresh_token)
         record = await self.token_repo.find_by_hash(token_hash)
 
@@ -99,6 +101,16 @@ class AuthService:
             await self.token_repo.revoke_family(record.family_id)
             raise RefreshTokenReuseError()
 
+        # Device binding: if the token was issued with a device id and the
+        # caller presents a *different* one, treat it exactly like reuse —
+        # a stolen refresh token being replayed from another device. Only
+        # enforced when both sides actually have a value, so tokens issued
+        # before this feature (or callers that don't send X-Device-Id)
+        # keep working.
+        if record.device_id is not None and device_id is not None and record.device_id != device_id:
+            await self.token_repo.revoke_family(record.family_id)
+            raise RefreshTokenReuseError()
+
         # Normalise both sides to naive UTC before comparing.
         if _strip_tz(record.expires_at) < _utcnow():
             raise RefreshTokenExpiredError()
@@ -107,12 +119,18 @@ class AuthService:
         if not user or not user.is_active:
             raise UserDeactivatedError()
 
-        # Rotate: revoke old record, issue new token in the same family.
+        # Rotate: revoke old record, issue new token in the same family,
+        # carrying the device id forward (or attaching one for the first
+        # time if the record didn't have one yet).
         await self.token_repo.revoke(record.id)
         raw_new = generate_raw_token()
         new_expires_at = _utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         await self.token_repo.create(
-            user.id, hash_token(raw_new), new_expires_at, record.family_id
+            user.id,
+            hash_token(raw_new),
+            new_expires_at,
+            record.family_id,
+            device_id=record.device_id or device_id,
         )
 
         access_token = self.jwt.create_access_token(user.id, user.role)

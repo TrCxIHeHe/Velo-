@@ -53,6 +53,7 @@ class RideService:
         wallet_service: WalletService,
         audit_repo: AuditLogRepository,
         notification_service: NotificationService | None = None,
+        redis_client=None,
     ) -> None:
         self.ride_repo = ride_repo
         self.dock_repo = dock_repo
@@ -60,6 +61,7 @@ class RideService:
         self.wallet_service = wallet_service
         self.audit_repo = audit_repo
         self.notification_service = notification_service
+        self.redis = redis_client
 
     async def _notify(self, user_id: uuid.UUID, type_: str, title: str, body: str) -> None:
         if self.notification_service is not None:
@@ -129,6 +131,22 @@ class RideService:
             raise DockMismatchError()
 
         jti = payload["jti"]
+
+        # Atomic one-time-use lock: SETNX is the correct fix for QR replay
+        # (a plain read-then-write status check has a TOCTOU race — two
+        # concurrent confirm calls with the same token could both pass the
+        # status check before either commits its update). This must be
+        # checked before the DB status check, not instead of it: Redis is
+        # the primary defense, the DB status check below is a second
+        # independent layer in case redis_client wasn't wired in.
+        if self.redis is not None:
+            lock_key = f"ride_token_used:{jti}"
+            acquired = await self.redis.set(
+                lock_key, "1", nx=True, ex=settings.RIDE_TOKEN_TTL_SECONDS + 5
+            )
+            if not acquired:
+                raise RideTokenReusedError()
+
         ride = await self.ride_repo.find_by_jti(jti)
         if not ride:
             raise RideTokenInvalidError()

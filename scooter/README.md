@@ -125,9 +125,12 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-- `JWT_SECRET` → run `openssl rand -hex 32` and paste the output
 - `FIREBASE_PROJECT_ID` → your Firebase project ID (e.g. `velo-cd57c`)
 - `FIREBASE_SERVICE_ACCOUNT_PATH` → `./firebase-service-account.json`
+- Access tokens are RS256-signed; `app/config.py` bakes in a dev-only RSA
+  keypair so no `.env` setup is needed locally — see `backend/.env.example`
+  for how to generate and set real `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` before
+  a real deployment.
 
 Download Firebase service account key:
 Firebase Console → Project Settings → Service Accounts → Generate new private key
@@ -417,8 +420,41 @@ Interactive docs (development only): `http://localhost:8000/docs`
 
 ---
 
-## What is NOT in Phase 1
+## Production release build — required steps
 
-Ride Service, Vehicle Service, Wallet Service, Dock Service, QR codes,
-Maps, Notifications, Admin Dashboard, GPS, ESP32 integration, payments.
-These are defined in future phases.
+Before shipping a release build to real users:
+
+1. **Obfuscate the binary and split debug info** (per the mobile security
+   architecture doc — makes reverse-engineering meaningfully harder):
+   ```bash
+   flutter build apk --release --obfuscate --split-debug-info=build/symbols
+   flutter build ipa --release --obfuscate --split-debug-info=build/symbols
+   ```
+   Keep `build/symbols` private and versioned somewhere safe — you need it
+   to symbolicate crash reports from an obfuscated build.
+
+2. **Set the pinned certificate hash** (`lib/core/network/dio_client.dart`)
+   once a production backend is deployed and has a real TLS cert:
+   ```bash
+   openssl s_client -connect api.velo.example:443 </dev/null 2>/dev/null \
+     | openssl x509 -noout -fingerprint -sha256
+   flutter build apk --release --dart-define=CERT_PIN_SHA256=<hex> ...
+   ```
+   Unset (the default), the app trusts the platform's normal CA chain with
+   no extra pinning — fine for dev, not for a production release.
+
+3. **RS256 JWT keys** — set real `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` on the
+   backend (see `backend/.env.example`); the app has nothing to configure
+   here since it never sees the private key.
+
+Root/jailbreak detection (`lib/core/security/device_integrity.dart`) and
+per-device refresh-token binding (`X-Device-Id`, `token_interceptor.dart`)
+are already active in every build, debug or release.
+
+## What is NOT in this build
+
+Admin Dashboard, marketing website, real-money Razorpay (keys intentionally
+blank until your team configures them — see `backend/README.md`), MQTT/ESP32
+hardware integration, PostGIS-backed geo queries, monitoring stack. See
+`../EXECUTIVE_STATUS.md` at the repo root for the full status against the
+architecture docs.

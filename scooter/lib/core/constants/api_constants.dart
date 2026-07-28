@@ -9,6 +9,14 @@ abstract final class ApiConstants {
   static const String logout = '/auth/logout';
   static const String me = '/auth/me';
 
+  static const String wallet = '/wallet';
+  static const String walletTopup = '/wallet/topup';
+  static const String walletTransactions = '/wallet/transactions';
+  static const String paymentsOrders = '/payments/orders';
+
+  static const String rides = '/rides';
+  static const String docks = '/docks';
+
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 10);
 }

@@ -31,8 +31,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+import fakeredis
+
 from app import models  # noqa: F401 — registers every model on Base.metadata
 from app.core.firebase import get_firebase_service
+from app.core.redis import get_redis_client
 from app.database import Base, get_db
 from app.main import app
 from app.models import User
@@ -83,15 +86,26 @@ def firebase_mock():
     return make_firebase_mock()
 
 
+# ── Redis mock ───────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def redis_mock():
+    """Fresh in-memory FakeAsyncRedis per test — real SETNX/EXPIRE semantics
+    without a real Redis server, so ride-token replay-protection tests
+    exercise the actual atomic-lock code path."""
+    return fakeredis.FakeAsyncRedis(decode_responses=True)
+
+
 # ── HTTP test client ──────────────────────────────────────────────────────────
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session, firebase_mock) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session, firebase_mock, redis_mock) -> AsyncGenerator[AsyncClient, None]:
     async def _override_get_db():
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_firebase_service] = lambda: firebase_mock
+    app.dependency_overrides[get_redis_client] = lambda: redis_mock
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

@@ -9,6 +9,7 @@ from app.auth.dependencies import CurrentUser
 from app.core.exceptions import AppException
 from app.core.firebase import FirebaseService, get_firebase_service
 from app.core.rate_limit import limiter
+from app.core.redis import get_redis_client
 from app.core.response import error_response, success_response
 from app.database import get_db
 from app.dock.repository import DockRepository, VehicleRepository
@@ -23,9 +24,10 @@ from app.wallet.service import WalletService
 router = APIRouter(prefix="/rides", tags=["rides"])
 
 
-def get_ride_service(
+async def get_ride_service(
     session: Annotated[AsyncSession, Depends(get_db)],
     firebase: Annotated[FirebaseService, Depends(get_firebase_service)],
+    redis_client=Depends(get_redis_client),
 ) -> RideService:
     return RideService(
         RideRepository(session),
@@ -34,6 +36,7 @@ def get_ride_service(
         WalletService(WalletRepository(session), AuditLogRepository(session)),
         AuditLogRepository(session),
         NotificationService(NotificationRepository(session), UserDeviceRepository(session), firebase),
+        redis_client=redis_client,
     )
 
 

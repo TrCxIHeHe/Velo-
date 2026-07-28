@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scooter/core/widgets/app_button.dart';
+import 'package:scooter/core/widgets/app_text_field.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_providers.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_state.dart';
 
@@ -101,8 +103,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   _error = null;
                 }),
               ),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
             )
           : null,
       body: SafeArea(
@@ -118,42 +118,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 48),
-          Text('Welcome', style: Theme.of(context).textTheme.headlineMedium),
+          Text('Welcome to Velo', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text('Enter your phone number to get started.',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 40),
-          TextField(
+          AppTextField(
+            label: 'Phone number',
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
+            hintText: '+91 98765 43210',
+            prefixIcon: Icons.phone_outlined,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Phone number',
-              hintText: '+91 98765 43210',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
+            errorText: _error,
             onSubmitted: (_) => _sendOtp(),
           ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!,
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _loading ? null : _sendOtp,
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Send OTP'),
-            ),
-          ),
+          PrimaryButton(label: 'Send OTP', loading: _loading, onPressed: _sendOtp),
         ],
       );
 
@@ -161,48 +142,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 48),
-          Text('Verify OTP', style: Theme.of(context).textTheme.headlineMedium),
+          Text('Verify OTP', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text('Code sent to ${_phoneCtrl.text.trim()}',
               style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 40),
-          TextField(
+          AppTextField(
+            label: '6-digit code',
             controller: _otpCtrl,
             keyboardType: TextInputType.number,
+            hintText: 'Enter OTP',
+            prefixIcon: Icons.lock_outlined,
             maxLength: 6,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: '6-digit code',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.lock_outlined),
-              counterText: '',
-            ),
+            errorText: _error,
             onSubmitted: (_) => _verifyOtp(),
           ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!,
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _loading ? null : _verifyOtp,
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Verify'),
-            ),
-          ),
+          PrimaryButton(label: 'Verify', loading: _loading, onPressed: _verifyOtp),
           const SizedBox(height: 16),
           Center(
-            child: TextButton(
+            child: TextLinkButton(
+              label: 'Resend OTP',
               onPressed: _loading ? null : _sendOtp,
-              child: const Text('Resend OTP'),
             ),
           ),
         ],

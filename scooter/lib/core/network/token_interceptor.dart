@@ -23,6 +23,10 @@ class TokenInterceptor extends Interceptor {
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
     }
+    // Binds refresh tokens to this install (see backend AuthService.refresh)
+    // — sent on every request, including /auth/login and /auth/refresh
+    // since those also go through this dio instance.
+    options.headers['X-Device-Id'] = await storage.getOrCreateDeviceId();
     handler.next(options);
   }
 

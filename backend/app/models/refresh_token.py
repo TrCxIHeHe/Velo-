@@ -18,6 +18,11 @@ class RefreshToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     family_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False)
+    # Client-generated device identifier (see scooter/lib/core/storage/secure_storage.dart).
+    # Nullable so tokens issued before this feature (or clients that don't
+    # send X-Device-Id) keep working — binding is only enforced when both
+    # the stored record and the presented header have a value.
+    device_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

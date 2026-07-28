@@ -87,6 +87,59 @@ async def test_refresh_reuse_revokes_family(db_session):
 
 
 @pytest.mark.asyncio
+async def test_refresh_with_matching_device_id_succeeds(db_session):
+    user_repo = UserRepository(db_session)
+    token_repo = RefreshTokenRepository(db_session)
+    audit_repo = AuditLogRepository(db_session)
+    jwt = JWTService()
+    firebase = _mock_firebase(uid="device-match-uid", phone="+910000000010")
+
+    service = AuthService(user_repo, token_repo, firebase, jwt, audit_repo)
+    login_result = await service.login("t-device", device_id="device-abc")
+    refresh_result = await service.refresh(login_result.refresh_token, device_id="device-abc")
+
+    assert refresh_result.access_token
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_mismatched_device_id_revokes_family(db_session):
+    """A refresh token bound to one device, presented with a different
+    device id, is treated exactly like a stolen/replayed token."""
+    user_repo = UserRepository(db_session)
+    token_repo = RefreshTokenRepository(db_session)
+    audit_repo = AuditLogRepository(db_session)
+    jwt = JWTService()
+    firebase = _mock_firebase(uid="device-mismatch-uid", phone="+910000000011")
+
+    service = AuthService(user_repo, token_repo, firebase, jwt, audit_repo)
+    login_result = await service.login("t-device-2", device_id="device-abc")
+
+    with pytest.raises(RefreshTokenReuseError):
+        await service.refresh(login_result.refresh_token, device_id="device-xyz")
+
+    # Family was revoked — even the correct device id can no longer refresh.
+    with pytest.raises(RefreshTokenReuseError):
+        await service.refresh(login_result.refresh_token, device_id="device-abc")
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_device_id_is_backward_compatible(db_session):
+    """Tokens issued without a device id (or callers that don't send
+    X-Device-Id) must keep working — binding is opt-in, not required."""
+    user_repo = UserRepository(db_session)
+    token_repo = RefreshTokenRepository(db_session)
+    audit_repo = AuditLogRepository(db_session)
+    jwt = JWTService()
+    firebase = _mock_firebase(uid="no-device-uid", phone="+910000000012")
+
+    service = AuthService(user_repo, token_repo, firebase, jwt, audit_repo)
+    login_result = await service.login("t-no-device")
+    refresh_result = await service.refresh(login_result.refresh_token)
+
+    assert refresh_result.access_token
+
+
+@pytest.mark.asyncio
 async def test_logout_revokes_token(db_session):
     user_repo = UserRepository(db_session)
     token_repo = RefreshTokenRepository(db_session)

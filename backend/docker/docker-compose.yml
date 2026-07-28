@@ -13,10 +13,11 @@
 #            so you can *see* your tables without installing psql or a GUI
 #            client. Open http://localhost:8080 after `docker compose up`.
 #
-# Redis and Mosquitto (hardware/MQTT) are intentionally NOT here. Ride
-# tokens are short-lived signed JWTs (see app/ride/service.py), so there's
-# no one-time-use store to back with Redis; MQTT is a Phase 3 hardware
-# concern, not MVP. Add either back here when that day comes.
+# redis    — backs atomic ride-token replay protection (SETNX, see
+#            app/ride/service.py::confirm_ride) and, in production,
+#            slowapi's rate-limit storage. Mosquitto (hardware/MQTT) is
+#            still intentionally NOT here — that's a Phase 3 hardware
+#            concern, not MVP.
 #
 # USAGE
 # -----
@@ -44,6 +45,17 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ..
@@ -52,10 +64,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/scooter_db
+      REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
-      JWT_SECRET: dev_secret_change_before_deploy
       RIDE_TOKEN_SECRET: dev_ride_secret_change_before_deploy
     volumes:
       - ../firebase-service-account.json:/app/firebase-service-account.json:ro
