@@ -72,7 +72,7 @@ services:
       ENVIRONMENT: development
       RIDE_TOKEN_SECRET: dev_ride_secret_change_before_deploy
     volumes:
-      - ../firebase-service-account.json:/app/firebase-service-account.json:ro
+      - ../:/app
     ports:
       - "8000:8000"
 
