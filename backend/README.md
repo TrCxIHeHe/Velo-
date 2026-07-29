@@ -1,164 +1,529 @@
 # Velo Backend
 
-FastAPI modular-monolith backend for the Velo smart micromobility platform. Merged from Track A
-(auth, ride token issuance) and Track B (wallet, dock/fleet, admin dashboards, audit log).
+FastAPI modular-monolith backend for the **Velo** smart micromobility platform. The project combines authentication, ride management, wallet, fleet management, payments, notifications, and admin dashboards into a single backend.
 
-## Stack
+## Tech Stack
 
-- **FastAPI** + **SQLAlchemy 2 async** + **asyncpg**
-- **PostgreSQL 16** — primary datastore
-- **Firebase Admin** — phone-number auth (OTP) + Cloud Messaging (push)
-- **Razorpay** — wallet top-up (order + webhook, signature-verified)
-- **Alembic** — database migrations
-- **JWT (python-jose)** — access tokens (15 min) + short-lived ride tokens (30 s)
-- **slowapi** — per-IP rate limiting (login, ride-token, wallet/payment endpoints)
-- **pytest + pytest-asyncio** — test suite runs against in-memory SQLite, zero external deps
+- **FastAPI** + **SQLAlchemy 2 (Async)** + **asyncpg**
+- **PostgreSQL 16**
+- **Redis**
+- **Firebase Admin SDK** (Phone Authentication + FCM)
+- **Razorpay** (Wallet top-ups)
+- **Alembic** (Database migrations)
+- **python-jose** (JWT authentication)
+- **slowapi** (Rate limiting)
+- **pytest + pytest-asyncio**
 
-## Structure
+---
+
+# Project Structure
 
 ```
 app/
-├── main.py         create_app() factory, global exception handlers, router mounting
-├── config.py       Settings (env-driven)
-├── database.py     engine, session factory, Base
-├── types.py        GUID — cross-dialect UUID type (Postgres native / SQLite CHAR(36))
-├── core/           exceptions, response helpers, JWT, Firebase, security, rate limiting
-├── auth/           Firebase OTP login, JWT issue/refresh/rotation, /auth/me
-├── ride/           token-based ride lifecycle (PENDING → ACTIVE → COMPLETED)
-├── dock/           dock/slot/vehicle CRUD and availability
-├── wallet/         INR wallet — top-up, ride-fare debit, admin adjust (ledger, all audited)
-├── payments/       Razorpay order creation + signature-verified webhook → wallet credit
-├── notifications/  FCM device-token registration + push-and-persist notification service
-├── admin/          fleet/revenue/user stats + user, audit-log, and ride management (role-gated)
-├── audit/          audit log writer
-└── models/         SQLAlchemy models, all exported from models/__init__.py
+├── main.py         create_app() factory, exception handlers, router mounting
+├── config.py       Environment-based settings
+├── database.py     Engine, session factory, Base
+├── types.py        Cross-dialect GUID type
+├── core/           Security, JWT, Firebase, helpers
+├── auth/           Authentication
+├── ride/           Ride lifecycle
+├── dock/           Dock & vehicle management
+├── wallet/         Wallet & transactions
+├── payments/       Razorpay integration
+├── notifications/  Push notifications
+├── admin/          Admin APIs
+├── audit/          Audit logging
+└── models/         SQLAlchemy models
 ```
 
-Each feature module follows repository → service → router → schemas.
-
-## Ride flow
+Each feature follows the same architecture:
 
 ```
-1. POST /api/v1/rides/token   { dock_id }           → ride_token (30s JWT) + ride_id   [user app]
-2. POST /api/v1/rides/confirm { ride_token, dock_id} → ride ACTIVE, vehicle assigned    [dock hardware]
-3. POST /api/v1/rides/{id}/end{ dock_id }            → ride COMPLETED, fare charged     [user app]
+Router
+   ↓
+Service
+   ↓
+Repository
+   ↓
+Database
 ```
 
-Fare: ₹2/minute, minimum ₹5, charged from the user's wallet at ride end. The ride token expires in
-30s to prevent lock-holding. Ride start/end and low-balance events trigger a best-effort FCM push
-(see `notifications/`) — a missing device token or Firebase outage never fails the ride itself.
+---
 
-## Wallet top-up flow
+# Ride Flow
 
 ```
-1. POST /api/v1/payments/orders    { amount }                → Razorpay order_id + key_id  [user app]
-   (client opens Razorpay Checkout with those two values)
-2. Razorpay calls POST /api/v1/payments/webhook on payment.captured, HMAC-signed
-   → signature verified against RAZORPAY_WEBHOOK_SECRET → wallet credited, idempotent on payment_id
+User App
+    │
+    │ POST /rides/token
+    ▼
+Ride Token (30s)
+
+    │
+    │ POST /rides/confirm
+    ▼
+Ride ACTIVE
+
+    │
+    │ POST /rides/{id}/end
+    ▼
+Ride COMPLETED
+
+    │
+    ▼
+Wallet Debited
 ```
 
-`/payments/orders` + the webhook credit the wallet only after Razorpay confirms the payment —
-the client never controls its own balance there. **`/wallet/topup` is a separate, pre-existing
-endpoint that lets any authenticated user credit their own wallet directly, with no payment
-behind it at all.** That's fine for dev/testing (and is what the test suite uses) but is a real
-"free money" hole if left reachable in production — gate it behind `require_role("ADMIN")` or
-remove it before a real pilot with real money.
+Fare calculation:
 
-> **Update:** `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` are intentionally
-> left blank for now — no real Razorpay account is wired up yet. `/payments/orders` and the webhook
-> will keep returning `503 PAYMENT_GATEWAY_NOT_CONFIGURED` until those are set; this is expected and
-> not a bug.
+- ₹2 / minute
+- Minimum fare: ₹5
 
-## Security posture
+---
 
-- **Auth**: Firebase-verified phone login → 15-min JWT access tokens + 30-day single-use, rotated
-  refresh tokens (reuse revokes the whole session family).
-- **Rate limiting**: login (5/min), ride-token request (3/min), wallet top-up + payment order
-  creation (10/min) — per-IP, active only when `ENVIRONMENT=production` (see
-  `app/core/rate_limit.py` for why it's off elsewhere).
-- **CORS**: origin list from `CORS_ORIGINS`; wildcard (`*`) never gets `allow_credentials=True`.
-- **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
-  `Permissions-Policy` on every response; HSTS added in production.
-- **Audit log**: every wallet top-up/ride-fare-debit/admin-adjust and every admin role/active
-  change is written to `audit_logs` with the acting user's id.
-- **Payments**: wallet is credited only from a Razorpay webhook whose HMAC-SHA256 signature is
-  verified against `RAZORPAY_WEBHOOK_SECRET`; idempotent on `payment_id` (retries don't double-credit).
-- **DB-level constraints**: `wallet_transactions.amount > 0` is enforced by a CHECK constraint,
-  not just service-layer validation.
-- All endpoints validate input via Pydantic; every query goes through the ORM (no raw SQL).
+# Wallet Top-up Flow
 
-## Local development
+```
+User
+   │
+   │ POST /payments/orders
+   ▼
+Razorpay Order
 
-Requires Python 3.12 (matches CI and `backend/docker/Dockerfile`).
+   │
+   │ Payment
+   ▼
+
+Razorpay Webhook
+   │
+   ▼
+Wallet Credited
+```
+
+Wallet credits occur **only** after a valid Razorpay webhook is received.
+
+> **Note**
+>
+> `/wallet/topup` exists only for development/testing and should be disabled or admin-protected before production.
+
+---
+
+# Security
+
+- Firebase phone authentication
+- JWT access tokens (15 min)
+- Refresh token rotation
+- Ride tokens (30 seconds)
+- Role-based authorization
+- Rate limiting
+- Audit logging
+- Database-level constraints
+- Security headers
+- ORM-only queries (no raw SQL)
+
+---
+
+# Local Development
+
+## Prerequisites
+
+Install:
+
+- Python 3.12+
+- Docker Desktop (recommended)
+- Git
+
+Clone the repository:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements/dev.txt
-cp .env.example .env    # fill in real values — see comments in the file
-alembic upgrade head
-uvicorn app.main:app --reload
+git clone <repository-url>
+cd Velo-/backend
 ```
 
-Or via Docker (recommended — avoids local Postgres setup entirely):
+---
+
+# Environment Setup
+
+Copy the example environment file:
 
 ```bash
-cd docker && docker compose up -d
+cp .env.example .env
+```
+
+Update the required values inside `.env`.
+
+Important settings include:
+
+- Database
+- Redis
+- JWT keys
+- Firebase
+- Razorpay (optional for development)
+
+---
+
+# Running with Docker (Recommended)
+
+Move into the Docker directory:
+
+```bash
+cd docker
+```
+
+Start all services:
+
+```bash
+docker compose up -d
+```
+
+Run database migrations:
+
+```bash
 docker compose exec backend alembic upgrade head
 ```
 
-## Tests
+Verify the services:
+
+```bash
+docker compose ps
+```
+
+Open Swagger UI:
+
+```
+http://localhost:8000/docs
+```
+
+Health endpoint:
+
+```
+http://localhost:8000/health
+```
+
+---
+
+## Docker Development Workflow
+
+The backend source code is bind-mounted into the container.
+
+```yaml
+volumes:
+  - ../:/app
+```
+
+This means:
+
+- Changes made locally are immediately visible inside the container.
+- New Alembic migrations are created directly inside your repository.
+- No files need to be copied from the container.
+
+---
+
+# Running without Docker
+
+Create a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Linux/macOS
+
+```bash
+source .venv/bin/activate
+```
+
+Windows
+
+```powershell
+.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements/dev.txt
+```
+
+Copy the environment file:
+
+```bash
+cp .env.example .env
+```
+
+Run migrations:
+
+```bash
+alembic upgrade head
+```
+
+Start the server:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+---
+
+# Database Migrations
+
+Generate a migration after modifying SQLAlchemy models.
+
+Local:
+
+```bash
+alembic revision --autogenerate -m "add vehicle status"
+```
+
+Docker:
+
+```bash
+docker compose exec backend \
+alembic revision --autogenerate -m "add vehicle status"
+```
+
+Apply migrations:
+
+Local:
+
+```bash
+alembic upgrade head
+```
+
+Docker:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Check migration status:
+
+```bash
+docker compose exec backend alembic current
+```
+
+View migration history:
+
+```bash
+docker compose exec backend alembic history
+```
+
+---
+
+# Alembic & GUID
+
+This project uses a custom SQLAlchemy UUID type:
+
+```python
+from app.types import GUID
+```
+
+Occasionally Alembic autogeneration may render:
+
+```python
+app.types.GUID()
+```
+
+instead of
+
+```python
+GUID()
+```
+
+If that happens:
+
+1. Add
+
+```python
+from app.types import GUID
+```
+
+to the migration.
+
+2. Replace every occurrence of
+
+```python
+app.types.GUID()
+```
+
+with
+
+```python
+GUID()
+```
+
+This is an Alembic limitation with custom `TypeDecorator` classes and does **not** affect runtime behavior.
+
+---
+
+# Resetting the Database
+
+Delete everything:
+
+```bash
+docker compose down -v
+```
+
+Start fresh:
+
+```bash
+docker compose up -d
+```
+
+Recreate the schema:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+# Running Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-Fixtures live in `tests/conftest.py`. **Known gap:** SQLite tests cannot validate
-`with_for_update()` row-locking (silent no-op on SQLite) — a Postgres-backed concurrency test is
-required before this touches real money.
+Current test suite uses SQLite.
 
-## API endpoints
+> **Known limitation**
+>
+> SQLite does not support `SELECT ... FOR UPDATE`, so row-locking behavior cannot be fully tested. PostgreSQL integration tests should be added before production deployment.
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/v1/auth/login` | — | Firebase OTP → tokens |
-| POST | `/api/v1/auth/refresh` | — | Rotate refresh token |
-| POST | `/api/v1/auth/logout` | — | Revoke refresh token |
-| GET | `/api/v1/auth/me` | User | Get profile |
-| PATCH | `/api/v1/auth/me` | User | Update name |
-| GET | `/api/v1/docks` | Public | List active docks |
-| GET | `/api/v1/docks/{id}` | Public | Dock detail + slots |
+---
+
+# Useful Docker Commands
+
+Start services
+
+```bash
+docker compose up -d
+```
+
+Stop services
+
+```bash
+docker compose down
+```
+
+Restart services
+
+```bash
+docker compose restart
+```
+
+Backend logs
+
+```bash
+docker compose logs -f backend
+```
+
+PostgreSQL shell
+
+```bash
+docker compose exec postgres psql -U postgres scooter_db
+```
+
+Redis CLI
+
+```bash
+docker compose exec redis redis-cli
+```
+
+Current migration
+
+```bash
+docker compose exec backend alembic current
+```
+
+Migration history
+
+```bash
+docker compose exec backend alembic history
+```
+
+Generate migration
+
+```bash
+docker compose exec backend alembic revision --autogenerate -m "message"
+```
+
+Apply migrations
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+# API Documentation
+
+Interactive API documentation is available after starting the backend.
+
+Swagger UI
+
+```
+http://localhost:8000/docs
+```
+
+OpenAPI JSON
+
+```
+http://localhost:8000/openapi.json
+```
+
+---
+
+# API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---------|----------|------|-------------|
+| POST | `/api/v1/auth/login` | — | Firebase OTP login |
+| POST | `/api/v1/auth/refresh` | — | Refresh access token |
+| POST | `/api/v1/auth/logout` | — | Logout |
+| GET | `/api/v1/auth/me` | User | Current user |
+| PATCH | `/api/v1/auth/me` | User | Update profile |
+| GET | `/api/v1/docks` | Public | List docks |
+| GET | `/api/v1/docks/{id}` | Public | Dock details |
 | POST | `/api/v1/docks` | Admin | Create dock |
 | PATCH | `/api/v1/docks/{id}` | Admin | Update dock |
 | GET | `/api/v1/docks/vehicles/all` | Admin | List vehicles |
-| POST | `/api/v1/docks/vehicles` | Admin | Add vehicle |
+| POST | `/api/v1/docks/vehicles` | Admin | Create vehicle |
 | PATCH | `/api/v1/docks/vehicles/{id}` | Admin | Update vehicle |
 | POST | `/api/v1/rides/token` | User | Request ride token |
-| POST | `/api/v1/rides/confirm` | None* | Hardware confirms unlock |
+| POST | `/api/v1/rides/confirm` | Ride Token | Confirm ride |
 | POST | `/api/v1/rides/{id}/end` | User | End ride |
-| GET | `/api/v1/rides/active` | User | Current active ride |
+| GET | `/api/v1/rides/active` | User | Active ride |
 | GET | `/api/v1/rides` | User | Ride history |
-| GET | `/api/v1/rides/{id}` | User | Ride detail |
-| GET | `/api/v1/wallet` | User | Balance |
-| POST | `/api/v1/wallet/topup` | User | Direct top-up, no payment check — dev/test only, see warning above |
+| GET | `/api/v1/rides/{id}` | User | Ride details |
+| GET | `/api/v1/wallet` | User | Wallet balance |
+| POST | `/api/v1/wallet/topup` | User | Development top-up |
 | GET | `/api/v1/wallet/transactions` | User | Transaction history |
-| POST | `/api/v1/wallet/admin/adjust` | Admin | Admin credit/debit |
-| POST | `/api/v1/payments/orders` | User | Create Razorpay order for top-up |
-| POST | `/api/v1/payments/webhook` | Signature | Razorpay payment.captured → credits wallet |
-| POST | `/api/v1/notifications/device-token` | User | Register/update FCM device token |
-| GET | `/api/v1/notifications` | User | List own notifications |
-| GET | `/api/v1/admin/stats/dashboard` | Admin | Fleet + revenue + user stats |
-| GET | `/api/v1/admin/stats/fleet` | Admin | Fleet utilization |
-| GET | `/api/v1/admin/stats/revenue` | Admin | Revenue figures |
-| GET | `/api/v1/admin/stats/users` | Admin | Wallet count |
-| GET | `/api/v1/admin/users` | Admin | List all users |
-| GET | `/api/v1/admin/users/{id}` | Admin | User detail |
-| PATCH | `/api/v1/admin/users/{id}/role` | Admin | Set role |
-| PATCH | `/api/v1/admin/users/{id}/active` | Admin | Activate/deactivate |
-| GET | `/api/v1/admin/audit-logs` | Admin | Audit log |
-| GET | `/api/v1/admin/rides` | Admin | All rides |
-| GET | `/health`, `/api/v1/health` | — | Liveness probe |
+| POST | `/api/v1/wallet/admin/adjust` | Admin | Admin adjustment |
+| POST | `/api/v1/payments/orders` | User | Razorpay order |
+| POST | `/api/v1/payments/webhook` | Signature | Razorpay webhook |
+| POST | `/api/v1/notifications/device-token` | User | Register FCM token |
+| GET | `/api/v1/notifications` | User | Notifications |
+| GET | `/api/v1/admin/stats/dashboard` | Admin | Dashboard |
+| GET | `/api/v1/admin/stats/fleet` | Admin | Fleet statistics |
+| GET | `/api/v1/admin/stats/revenue` | Admin | Revenue statistics |
+| GET | `/api/v1/admin/stats/users` | Admin | User statistics |
+| GET | `/api/v1/admin/users` | Admin | Users |
+| GET | `/api/v1/admin/users/{id}` | Admin | User details |
+| PATCH | `/api/v1/admin/users/{id}/role` | Admin | Change role |
+| PATCH | `/api/v1/admin/users/{id}/active` | Admin | Activate/deactivate user |
+| GET | `/api/v1/admin/audit-logs` | Admin | Audit logs |
+| GET | `/api/v1/admin/rides` | Admin | Ride management |
+| GET | `/health` | — | Health check |
 
-*`/rides/confirm` is authenticated by the short-lived ride token, not a user JWT.
+---
 
-See [`../MERGE_CONFLICT_RESOLUTION.md`](../MERGE_CONFLICT_RESOLUTION.md) for how the
-`integration/complete-backend` branch was reconciled with `main`.
+# Additional Documentation
+
+See:
+
+```
+MERGE_CONFLICT_RESOLUTION.md
+```
+
+for details about how the Track A and Track B branches were merged into the final backend.
