@@ -47,9 +47,15 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       final auth = notifier.authState;
       final loc = state.matchedLocation;
 
-      // While session check is in progress, stay on splash.
-      if (auth is AuthInitial || auth is AuthLoading) {
+      // App startup only.
+      if (auth is AuthInitial) {
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
+      }
+
+      // Interactive login/OTP verification.
+      // Stay on the current screen while it completes.
+      if (auth is AuthLoading) {
+        return null;
       }
 
       // Not authenticated — go to login.

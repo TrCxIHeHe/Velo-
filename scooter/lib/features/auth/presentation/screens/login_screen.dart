@@ -106,7 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             )
           : null,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: _step == _Step.phone ? _buildPhone() : _buildOtp(),
         ),
