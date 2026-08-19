@@ -39,7 +39,7 @@ Phase 5. Specifically:
 | **UUID columns** | Replaced `postgresql.UUID(as_uuid=True)` with a custom `app/types.py::GUID` type on every model | **A real bug**, found while writing tests — see §2 |
 | **Admin Dashboard backend** | New `app/admin/` module: fleet, revenue, user stats | This is Track B's Phase 5 responsibility per the architecture doc |
 | **Dev-role gate** | Added `require_admin` to `app/dependencies.py` | Admin stats shouldn't be readable by every wallet-holding user |
-| **Seed script** | Renamed `seed_dev_user.py` → `seed_dev_data.py`, now seeds a vehicle too | **A real gap in the last session's testing** — see §2 |
+| **Seed script** | Renamed `seed_dev_user.py` → `seed_dev_data.py`, now seeds a dock, slot, and vehicle too | **A real gap in the last session's testing** — see §2 |
 | **Docker + CI** | `docker/Dockerfile`, `docker/docker-compose.yml`, `.github/workflows/ci.yml` | Phase 5 infra, previously just TODO placeholders |
 
 Nothing in `app/wallet/schemas.py`, `app/dock/*`, or the migration's table
@@ -111,10 +111,11 @@ business logic is correct; it does not prove your database constraints
 are satisfied.** The two are different guarantees.
 
 **Fix:** `scripts/seed_dev_data.py` (renamed from `seed_dev_user.py`) now
-seeds **both** a dev user and a dev vehicle, with fixed well-known UUIDs,
-so manual curl/Postman testing against real Postgres always has valid FK
-targets to reference. Run it once after every `alembic upgrade head` /
-database reset, before you touch any endpoint manually.
+seeds **a dev user, a dev dock, a dev slot, and a dev vehicle**, with
+fixed well-known UUIDs, so manual curl/Postman testing against real
+Postgres always has valid FK targets to reference. Run it once after
+every `alembic upgrade head` / database reset, before you touch any
+endpoint manually.
 
 ---
 
@@ -449,7 +450,7 @@ I did not just write this code and assume it works. In order:
    role gate actually returns 403 without the header). This is exactly
    where I found and fixed the two bugs in §2 — both surfaced only when
    testing against real Postgres, not the SQLite suite.
-9. Confirmed the corrected `scripts/seed_dev_data.py` fixes both FK issues
+9. Confirmed the corrected `scripts/seed_dev_data.py` fixes the FK issues
    and the full flow — including dock vehicle assignment — succeeds
    end-to-end.
 
@@ -479,8 +480,9 @@ disk, actually works — not just "should work."
    migration content, which is identical in shape to before, just with a
    couple of extra indexes).
 5. Run `python scripts/seed_dev_data.py` (note the renamed file) — this
-   replaces the old `seed_dev_user.py` and additionally seeds a dev
-   vehicle, which you'll need for testing `/docks/{id}/assign` manually.
+   replaces the old `seed_dev_user.py` and additionally seeds a dev dock,
+   slot, and vehicle, which you'll need for testing the unlock flow
+   manually.
 6. Start the server (`uvicorn app.main:app --reload`) and manually re-run
    the curl workflow from `setup.md` §6 to see it with your own eyes,
    then try the new admin endpoints:

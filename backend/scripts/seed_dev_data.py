@@ -39,10 +39,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import AsyncSessionFactory  # noqa: E402
+from app.models.dock import Dock, DockSlot  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
 
 DEV_USER_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+DEV_DOCK_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
+DEV_SLOT_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 DEV_VEHICLE_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
 
@@ -63,13 +66,43 @@ async def main():
         else:
             print(f"Dev user already exists: {DEV_USER_ID}")
 
+        dock = await session.get(Dock, DEV_DOCK_ID)
+        if dock is None:
+            dock = Dock(
+                id=DEV_DOCK_ID,
+                name="MG Road Dock",
+                location_lat=12.9716,
+                location_lng=77.5946,
+                address="MG Road, Bengaluru",
+                total_slots=2,
+                is_active=True,
+            )
+            session.add(dock)
+            print(f"Created dev dock: {DEV_DOCK_ID}")
+        else:
+            print(f"Dev dock already exists: {DEV_DOCK_ID}")
+
+        slot = await session.get(DockSlot, DEV_SLOT_ID)
+        if slot is None:
+            slot = DockSlot(
+                id=DEV_SLOT_ID,
+                dock_id=DEV_DOCK_ID,
+                slot_number=1,
+                is_occupied=True,
+            )
+            session.add(slot)
+            print(f"Created dev dock slot: {DEV_SLOT_ID}")
+        else:
+            print(f"Dev dock slot already exists: {DEV_SLOT_ID}")
+
         vehicle = await session.get(Vehicle, DEV_VEHICLE_ID)
         if vehicle is None:
             vehicle = Vehicle(
                 id=DEV_VEHICLE_ID,
                 qr_code="DEV-QR-0001",
                 status="AVAILABLE",
-                battery_pct=100,
+                battery_level=100,
+                slot_id=DEV_SLOT_ID,
             )
             session.add(vehicle)
             print(f"Created dev vehicle: {DEV_VEHICLE_ID}")
@@ -81,6 +114,7 @@ async def main():
     print()
     print("Use these headers/values in curl or Postman:")
     print(f"  X-Debug-User-Id: {DEV_USER_ID}")
+    print(f"  dock_id (for /docks and /rides/token): {DEV_DOCK_ID}")
     print(f"  vehicle_id (for /docks/{{id}}/assign): {DEV_VEHICLE_ID}")
 
 
