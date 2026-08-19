@@ -16,8 +16,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# curl   — used by the HEALTHCHECK below
+# libzbar0 — runtime shared lib required by pyzbar (app/dock_vision/service.py)
+#            for QR decoding; pyzbar dlopens this at import time, so it must
+#            be present in this final runtime stage, not just the builder.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libzbar0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user. Never run the app as root in a container —

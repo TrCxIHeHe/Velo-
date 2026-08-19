@@ -22,3 +22,6 @@ redis==5.0.0
 # Security hardening: rate limiting + payments
 slowapi==0.1.9
 razorpay==2.0.1
+
+opencv-python-headless==4.10.0.84
+pyzbar==0.1.9

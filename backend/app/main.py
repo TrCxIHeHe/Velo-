@@ -18,6 +18,7 @@ from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
 from app.ride.router import router as ride_router
 from app.wallet.router import router as wallet_router
+from app.dock_vision.router import router as dock_vision_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
     app.include_router(payments_router, prefix=settings.API_V1_PREFIX)
     app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(dock_vision_router, prefix=settings.API_V1_PREFIX)
 
     return app
 
