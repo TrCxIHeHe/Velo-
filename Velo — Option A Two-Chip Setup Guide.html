@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Velo — Option A Two-Chip Setup Guide</title>
+<style>
+:root {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #21262d;
+  --border:    #30363d;
+  --green:     #2ecc71;
+  --green-dim: #1a7a44;
+  --teal:      #1abc9c;
+  --amber:     #f39c12;
+  --red:       #e74c3c;
+  --blue:      #3498db;
+  --purple:    #8e44ad;
+  --text:      #e6edf3;
+  --muted:     #8b949e;
+  --code-bg:   #0d1117;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+
+/* ── Hero ──────────────────────────────────────────────── */
+.hero{background:linear-gradient(135deg,#0d2137 0%,#0d1117 65%);border-bottom:1px solid var(--border);padding:36px 32px 28px}
+.hero-label{font-size:11px;letter-spacing:2px;color:var(--green);text-transform:uppercase;margin-bottom:6px}
+.hero h1{font-size:26px;font-weight:700;color:#fff;margin-bottom:6px}
+.hero p{color:var(--muted);font-size:14px;max-width:680px}
+.badge{display:inline-block;background:var(--green-dim);color:var(--green);font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:8px;vertical-align:middle}
+.badge-blue{background:rgba(52,152,219,.2);color:var(--blue)}
+
+/* ── Tabs ──────────────────────────────────────────────── */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 20px;overflow-x:auto;gap:0;position:sticky;top:0;z-index:10}
+.tab{padding:12px 16px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;user-select:none}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── Sections ──────────────────────────────────────────── */
+.section{display:none;padding:28px 32px;max-width:960px;margin:0 auto}
+.section.active{display:block}
+
+/* ── Cards ─────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title span{font-size:16px}
+.card-sub{font-size:12px;font-weight:400;color:var(--muted);margin-left:auto}
+
+/* ── Grid ──────────────────────────────────────────────── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* ── Chip cards ────────────────────────────────────────── */
+.chip{border-radius:8px;padding:16px 18px;border:1px solid}
+.chip-cam{background:rgba(26,188,156,.07);border-color:rgba(26,188,156,.3)}
+.chip-s3{background:rgba(142,68,173,.07);border-color:rgba(142,68,173,.3)}
+.chip-be{background:rgba(52,152,219,.07);border-color:rgba(52,152,219,.3)}
+.chip-sol{background:rgba(243,156,18,.07);border-color:rgba(243,156,18,.3)}
+.chip h4{font-size:13px;font-weight:700;margin-bottom:6px}
+.chip-cam h4{color:var(--teal)}
+.chip-s3 h4{color:var(--purple)}
+.chip-be h4{color:var(--blue)}
+.chip-sol h4{color:var(--amber)}
+.chip ul{padding-left:14px}
+.chip li{font-size:12px;color:var(--muted);margin-bottom:3px}
+.chip li b{color:var(--text)}
+
+/* ── Why box ───────────────────────────────────────────── */
+.why{background:var(--surface2);border-left:3px solid var(--green);border-radius:0 6px 6px 0;padding:12px 16px;margin:10px 0;font-size:13px;color:var(--muted)}
+.why b{color:var(--text)}
+
+/* ── Flow diagram ──────────────────────────────────────── */
+.flow{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:24px 20px;font-family:'Courier New',monospace;font-size:12px;line-height:2;overflow-x:auto}
+.fc{color:var(--teal)}
+.fa{color:var(--amber)}
+.fb{color:var(--blue)}
+.fp{color:var(--purple)}
+.fg{color:var(--green)}
+.fm{color:var(--muted)}
+
+/* ── Protocol diagram ──────────────────────────────────── */
+.proto{display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-family:'Courier New',monospace;font-size:12px}
+.proto-row{display:flex;align-items:stretch}
+.proto-label{width:110px;min-width:110px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;display:flex;align-items:center;padding:10px 12px;border-right:1px solid var(--border)}
+.proto-body{flex:1;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.proto-row:last-child .proto-body{border-bottom:none}
+.byte{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700}
+.byte-len{color:var(--amber)}
+.byte-data{color:var(--teal)}
+.byte-ack-ok{color:var(--green);border-color:rgba(46,204,113,.3);background:rgba(46,204,113,.07)}
+.byte-ack-fail{color:var(--red);border-color:rgba(231,76,60,.3);background:rgba(231,76,60,.07)}
+.proto-arrow{color:var(--purple);font-weight:700;padding:0 4px}
+
+/* ── Wiring table ──────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--surface2);color:var(--muted);font-weight:600;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:12px}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.pin{font-family:monospace;font-weight:700;padding:2px 7px;border-radius:4px;font-size:12px;display:inline-block}
+.pin-cam{color:var(--teal);background:rgba(26,188,156,.1)}
+.pin-s3{color:var(--purple);background:rgba(142,68,173,.1)}
+.pin-ftdi{color:var(--amber);background:rgba(243,156,18,.1)}
+.pin-note{color:var(--muted);font-size:12px}
+
+/* ── Steps ─────────────────────────────────────────────── */
+.steps{display:flex;flex-direction:column;gap:14px}
+.step{display:flex;gap:14px;align-items:flex-start}
+.step-num{width:26px;height:26px;min-width:26px;background:var(--green-dim);color:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:2px}
+.step-body{flex:1}
+.step-title{font-weight:600;font-size:14px;color:var(--text);margin-bottom:4px}
+.step-desc{font-size:13px;color:var(--muted)}
+.step-desc b{color:var(--text)}
+
+/* ── Code ──────────────────────────────────────────────── */
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;font-family:'Courier New',monospace;font-size:12px;overflow-x:auto;margin:10px 0;color:#c9d1d9;line-height:1.6}
+code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-family:'Courier New',monospace;font-size:11px;color:var(--teal)}
+
+/* ── Alerts ─────────────────────────────────────────────── */
+.alert{display:flex;gap:12px;padding:14px 16px;border-radius:6px;margin-bottom:14px;font-size:13px;align-items:flex-start}
+.alert-icon{font-size:16px;flex-shrink:0;line-height:1.6}
+.alert-warn{background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.3)}
+.alert-info{background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.3)}
+.alert-ok{background:rgba(46,204,113,.08);border:1px solid rgba(46,204,113,.3)}
+.alert-red{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3)}
+
+/* ── Tags ──────────────────────────────────────────────── */
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px}
+.tag-green{background:rgba(46,204,113,.15);color:var(--green)}
+.tag-red{background:rgba(231,76,60,.15);color:var(--red)}
+.tag-amber{background:rgba(243,156,18,.15);color:var(--amber)}
+.tag-blue{background:rgba(52,152,219,.15);color:var(--blue)}
+.tag-purple{background:rgba(142,68,173,.15);color:var(--purple)}
+.tag-teal{background:rgba(26,188,156,.15);color:var(--teal)}
+
+/* ── File tree ──────────────────────────────────────────── */
+.tree{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:16px 20px;font-family:'Courier New',monospace;font-size:12px;line-height:2;color:#8b949e}
+.tree .file{color:var(--text)}
+.tree .dest{color:var(--muted);font-size:11px;margin-left:8px}
+.tree .new{color:var(--green)}
+.tree .mod{color:var(--amber)}
+.tree .dir{color:var(--blue);font-weight:700}
+
+/* ── Compare table ──────────────────────────────────────── */
+.cmp-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px 8px 0 0;overflow:hidden}
+.cmp-head div{padding:10px 14px;font-size:12px;font-weight:700}
+.cmp-body{border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
+.cmp-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
+.cmp-row:last-child{border-bottom:none}
+.cmp-row div{padding:8px 14px;font-size:12px}
+.cmp-row div:first-child{color:var(--muted);background:rgba(255,255,255,.02);font-weight:600}
+
+h3{font-size:14px;font-weight:700;color:var(--text);margin:20px 0 10px}
+h4{font-size:13px;font-weight:600;color:var(--text);margin:14px 0 6px}
+p{font-size:13px;color:var(--muted);margin-bottom:10px}
+ul{padding-left:18px}
+li{color:var(--muted);font-size:13px;margin-bottom:4px}
+li b{color:var(--text)}
+.sep{border:none;border-top:1px solid var(--border);margin:20px 0}
+.mono{font-family:monospace}
+.inline-chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;vertical-align:middle}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-label">🛴 Velo Dock Vision</div>
+  <h1>Option A — Two-Chip Setup Guide <span class="badge">feature/dock-vision</span></h1>
+  <p>ESP32-CAM captures only · ESP32-S3 handles WiFi + solenoid · FastAPI backend decodes and confirms ride</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active"  onclick="show('why',this)">🧠 Why Two Chips</div>
+  <div class="tab"         onclick="show('arch',this)">🗺 Architecture</div>
+  <div class="tab"         onclick="show('files',this)">📂 File Placement</div>
+  <div class="tab"         onclick="show('wiring',this)">🔌 Wiring</div>
+  <div class="tab"         onclick="show('proto',this)">📡 UART Protocol</div>
+  <div class="tab"         onclick="show('flash',this)">⚡ Flashing</div>
+  <div class="tab"         onclick="show('backend',this)">🖥 Backend</div>
+  <div class="tab"         onclick="show('test',this)">🧪 Testing</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ WHY ══ -->
+<div id="why" class="section active">
+
+  <div class="card">
+    <div class="card-title"><span>🧠</span> The Problem with One Chip</div>
+    <p>The original <code>dock_controller.ino</code> ran everything on the ESP32-CAM's single Xtensa LX6 core:</p>
+
+    <div class="cmp-head">
+      <div style="color:var(--red)">❌ Single-chip (old)</div>
+      <div></div>
+      <div style="color:var(--green)">✅ Two-chip Option A (new)</div>
+    </div>
+    <div class="cmp-body">
+      <div class="cmp-row">
+        <div>Camera DMA</div>
+        <div style="color:var(--red);font-size:12px;padding:8px 14px">Competes with WiFi TX for bus</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">CAM core: DMA only, no contention</div>
+      </div>
+      <div class="cmp-row">
+        <div>WiFi stack</div>
+        <div style="color:var(--red);font-size:12px;padding:8px 14px">~270 KB IRAM consumed on CAM</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">Runs on S3 (512 KB SRAM) instead</div>
+      </div>
+      <div class="cmp-row">
+        <div>PSRAM</div>
+        <div style="color:var(--amber);font-size:12px;padding:8px 14px">Needed for VGA framebuffer</div>
+        <div style="color:var(--teal);font-size:12px;padding:8px 14px">GPIO12/13 freed → UART link to S3</div>
+      </div>
+      <div class="cmp-row">
+        <div>Frame resolution</div>
+        <div style="color:var(--muted);font-size:12px;padding:8px 14px">VGA (640×480) if PSRAM available</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">QVGA (320×240) — enough for QR, ~20 KB</div>
+      </div>
+      <div class="cmp-row">
+        <div>HTTP POST latency</div>
+        <div style="color:var(--red);font-size:12px;padding:8px 14px">WiFi dropouts stall camera DMA</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">S3 handles retries independently</div>
+      </div>
+      <div class="cmp-row">
+        <div>Solenoid driver</div>
+        <div style="color:var(--amber);font-size:12px;padding:8px 14px">On CAM GPIO12 (PSRAM conflict)</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">Clean GPIO10 on S3, no conflicts</div>
+      </div>
+      <div class="cmp-row">
+        <div>Serial debug</div>
+        <div style="color:var(--amber);font-size:12px;padding:8px 14px">Only UART0 — same as FTDI port</div>
+        <div style="color:var(--green);font-size:12px;padding:8px 14px">S3 has native USB CDC — plug &amp; go</div>
+      </div>
+    </div>
+
+    <div class="why" style="margin-top:16px">
+      <b>Bottom line:</b> The CAM's LX6 core can DMA-capture a QVGA JPEG in ~40 ms. With WiFi running, that same frame takes 200–600 ms because DMA, WiFi TX and the TCP stack all fight for the same AHB bus. Removing WiFi from the CAM entirely eliminates that fight and makes capture times stable and fast.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>💡</span> Why the ESP32-S3 Specifically</div>
+    <div class="grid2" style="gap:12px">
+      <div class="chip chip-s3">
+        <h4>S3 advantages for the gateway role</h4>
+        <ul>
+          <li><b>Dual-core</b> Xtensa LX7 — one core for UART receive, one for WiFi TX</li>
+          <li><b>Native USB CDC</b> — no FTDI needed, appears as COM port immediately</li>
+          <li><b>512 KB SRAM</b> — fits a 200 KB frame buffer with room to spare</li>
+          <li><b>Better WiFi PHY</b> — 802.11b/g/n, antenna diversity on most dev boards</li>
+          <li><b>GPIO10 free</b> — clean solenoid driver pin, no peripheral conflicts</li>
+        </ul>
+      </div>
+      <div class="chip chip-cam">
+        <h4>CAM kept lean on purpose</h4>
+        <ul>
+          <li><b>Zero WiFi code</b> — WiFi.h not even included in cam_firmware.ino</li>
+          <li><b>One job only:</b> capture JPEG → write to Serial2 → wait for ACK</li>
+          <li><b>QVGA in DRAM</b> — no PSRAM dependency, fewer init failure modes</li>
+          <li><b>3× retry on FAIL</b> — tries fresh captures before giving up</li>
+          <li><b>LED blink</b> on success so you can see it working without a laptop</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ ARCH ══ -->
+<div id="arch" class="section">
+
+  <div class="card">
+    <div class="card-title"><span>🗺</span> Full System Architecture</div>
+    <div class="flow">
+<span class="fc">ESP32-CAM (AI Thinker)</span>            <span class="fp">ESP32-S3 (gateway)</span>               <span class="fb">Backend — Laptop 1</span>           <span class="fa">Hardware</span>
+OV2640 · QVGA · no WiFi           WiFi · Serial1 · GPIO10           FastAPI port 8000             Solenoid via MOSFET
+        │                                    │                                  │                           │
+        │  <span class="fm">① camera init (3 retries)</span>         │                                  │                           │
+        │  <span class="fm">② flush 10 dummy frames (AEC settle)</span>│                                  │                           │
+        │  <span class="fm">③ capture JPEG ~20 KB QVGA</span>         │                                  │                           │
+        │                                    │                                  │                           │
+        │──<span class="fa">4-byte length header</span>──────────────▶│                                  │                           │
+        │──<span class="fc">raw JPEG bytes (921600 baud)</span>───────▶│                                  │                           │
+        │                                    │  <span class="fm">④ reads header → knows exact size</span> │                           │
+        │                                    │  <span class="fm">⑤ reads body into 200KB buffer</span>    │                           │
+        │                                    │──<span class="fb">POST /api/v1/docks/{id}/scan</span>────▶│                           │
+        │                                    │     Content-Type: image/jpeg     │                           │
+        │                                    │                                  │  <span class="fm">cv2 raw grayscale pass</span>     │
+        │                                    │                                  │  <span class="fm">cv2 adaptive-threshold pass</span>│
+        │                                    │                                  │  <span class="fm">pyzbar fallback pass</span>       │
+        │                                    │                                  │  <span class="fm">confirm_ride() + audit log</span> │
+        │                                    │◀──<span class="fg">200 {ride: ACTIVE}</span>──────────────│                           │
+        │◀──<span class="fg">ACK_OK (0x4F)</span>──────────────────────│                                  │                           │
+        │  LED blink ×3                      │──<span class="fa">GPIO10 HIGH 3s</span>────────────────────────────────────────────▶│ <span class="fa">SOLENOID OPEN</span>
+        │  cool-down 3s                      │──<span class="fa">GPIO10 LOW</span> ─────────────────────────────────────────────────▶│ <span class="fa">SOLENOID CLOSE</span>
+        │                                    │                                  │                           │
+        │  <span class="fm">if ACK_FAIL: retry up to 3×</span>        │  <span class="fm">sends FAIL on 422/4xx/net error</span>  │                           │
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-top:4px">
+    <div class="chip chip-cam">
+      <h4>📷 ESP32-CAM</h4>
+      <ul>
+        <li>AI Thinker module</li>
+        <li>OV2640, QVGA (320×240)</li>
+        <li>JPEG quality 12 (~15–25 KB)</li>
+        <li>Serial2: GPIO12 TX / GPIO13 RX</li>
+        <li>921600 baud to S3</li>
+        <li>No WiFi.h, no HTTPClient</li>
+        <li>Powered by 5V external PSU</li>
+        <li>Flashed via FTDI</li>
+      </ul>
+    </div>
+    <div class="chip chip-s3">
+      <h4>🌐 ESP32-S3 (gateway)</h4>
+      <ul>
+        <li>Any S3 dev board</li>
+        <li>Serial1: GPIO18 RX / GPIO17 TX</li>
+        <li>200 KB UART receive buffer</li>
+        <li>WiFi POST to backend</li>
+        <li>Solenoid driver on GPIO10</li>
+        <li>ACK byte → CAM after confirm</li>
+        <li>Native USB — no FTDI needed</li>
+        <li>Powered by dev board USB</li>
+      </ul>
+    </div>
+    <div class="chip chip-be">
+      <h4>🖥 FastAPI Backend</h4>
+      <ul>
+        <li>Runs on Laptop 1 port 8000</li>
+        <li>Rate limit: 20 req/min on scan</li>
+        <li>Content-Type: image/jpeg guard</li>
+        <li>Size guard: 1 KB – 200 KB</li>
+        <li>cv2 → pyzbar 4-pass decode</li>
+        <li>AuditLogRepository on every path</li>
+        <li>confirm_ride() → ride ACTIVE</li>
+        <li>Audit logs success + failure</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ FILES ══ -->
+<div id="files" class="section">
+
+  <div class="card">
+    <div class="card-title"><span>📂</span> Where Every File Goes</div>
+    <div class="tree">
+<span class="dir">Velo-/</span>   (repo root, feature/dock-vision branch)
+│
+├── <span class="dir">firmware/</span>
+│   ├── <span class="dir">esp32_cam/</span>
+│   │   └── <span class="new file">cam_firmware.ino</span>   <span class="dest">← Flash to AI Thinker ESP32-CAM via FTDI</span>
+│   │
+│   └── <span class="dir">esp32_s3/</span>
+│       └── <span class="new file">s3_gateway.ino</span>    <span class="dest">← Flash to ESP32-S3 via native USB</span>
+│
+├── <span class="dir">backend/</span>
+│   ├── <span class="dir">app/</span>
+│   │   └── <span class="dir">dock_vision/</span>
+│   │       ├── <span class="mod file">router.py</span>         <span class="dest">← Replaces old router (B-03…B-07 fixes)</span>
+│   │       └── <span class="mod file">service.py</span>        <span class="dest">← Replaces old service (pyzbar + preprocessing)</span>
+│   │
+│   ├── <span class="dir">requirements/</span>
+│   │   └── <span class="mod file">base.txt</span>          <span class="dest">← Pillow==10.4.0 added</span>
+│   │
+│   └── <span class="dir">scripts/</span>
+│       └── <span class="new file">test_scan.py</span>      <span class="dest">← Run on Arduino laptop to test pipeline</span>
+│
+<span style="color:var(--muted)">Legend:  </span><span class="new">green = new file</span>   <span class="mod">amber = modified</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>📷</span> cam_firmware.ino</div>
+      <div class="why"><b>What it does:</b> Zero WiFi. Captures one JPEG frame over OV2640, writes it to Serial2, waits for 1-byte ACK from S3. Retries up to 3× on FAIL. Blinks LED on OK.</div>
+      <h4>Key constants to set before flashing:</h4>
+      <p style="color:var(--muted);font-size:12px">None — this chip doesn't know WiFi credentials or dock ID. All config lives on the S3.</p>
+      <h4>Arduino IDE board:</h4>
+      <code>AI Thinker ESP32-CAM</code>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🌐</span> s3_gateway.ino</div>
+      <div class="why"><b>What it does:</b> Owns all network and lock logic. Receives frame over Serial1, POSTs to backend, reads HTTP response, sends ACK to CAM, fires solenoid on 200.</div>
+      <h4>Constants to fill in before flashing:</h4>
+      <pre style="margin-top:6px">WIFI_SSID      = "YOUR_WIFI_SSID"
+WIFI_PASSWORD  = "YOUR_WIFI_PASSWORD"
+DOCK_ID        = "3fa85f64-..."   // from GET /api/v1/docks
+BACKEND_HOST   = "192.168.1.X"   // Laptop 1 local IP</pre>
+      <h4>Arduino IDE board:</h4>
+      <code>ESP32S3 Dev Module</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🖥</span> router.py — what changed and why</div>
+    <div class="grid2" style="gap:10px">
+      <div>
+        <h4>B-03 — MAX_IMAGE_BYTES</h4>
+        <div class="why">Old: <b>5 MB</b>. A real OV2640 VGA frame is 40–80 KB. Allowing 5 MB means 60–250× more numpy/malloc work on any junk payload. Fixed to <b>200 KB</b>.</div>
+      </div>
+      <div>
+        <h4>B-04 — Audit logging</h4>
+        <div class="why"><code>AuditLogRepository</code> was imported but never instantiated. Every scan attempt (success, QR fail, confirm fail) now writes an audit row so you can monitor false-scan rates in production.</div>
+      </div>
+      <div>
+        <h4>B-05 — Rate limiting</h4>
+        <div class="why">No rate limit on the scan endpoint = trivial DoS. Added <code>@limiter.limit("20/minute")</code>. The S3 scans at ~2/min at most; 20 blocks abuse while leaving real headroom.</div>
+      </div>
+      <div>
+        <h4>B-06 — Content-Type guard</h4>
+        <div class="why">Any <code>Content-Type</code> was accepted. Now rejects non-image bodies with 415 at the HTTP layer, before the image is read or decoded. Also added a <b>MIN_IMAGE_BYTES (1 KB)</b> guard for sub-frame noise.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔬</span> service.py — what changed and why</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Size normalisation (<code>_normalise_size</code>)</div>
+          <div class="step-desc">OV2640 can send frames from 160×120 to 1600×1200 depending on firmware settings. <b>cv2.QRCodeDetector</b> works best at ~640 px wide. Frames wider than 800 px are downscaled; frames narrower than 200 px are upscaled to 640×480.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">GaussianBlur → adaptiveThreshold (<code>_preprocess_for_qr</code>)</div>
+          <div class="step-desc">Raw OV2640 JPEGs have JPEG compression artefacts (ringing, blockiness) around the QR module edges. <b>GaussianBlur(3×3)</b> removes noise before thresholding. <b>adaptiveThreshold</b> normalises uneven dock lighting — a phone screen held at an angle under a bright LED is a classic failure mode this fixes.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">pyzbar 4-pass fallback</div>
+          <div class="step-desc"><b>cv2.QRCodeDetector</b> is fast but poor on rotated, blurry or compressed-twice frames. <b>pyzbar</b> (ZBar library) handles all of those. The pipeline runs: cv2 raw → cv2 enhanced → pyzbar raw → pyzbar enhanced. Cheapest first; stops as soon as any pass succeeds.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ WIRING ══ -->
+<div id="wiring" class="section">
+
+  <div class="alert alert-red">
+    <div class="alert-icon">🚫</div>
+    <div><b>Never power the ESP32-CAM from the FTDI 3.3V or 5V pin during operation.</b> The OV2640 draws 150–250 mA peak. FTDI regulators are rated 50 mA and will brown-out the camera mid-frame. Use the external 5V PSU for power; FTDI only carries TX/RX/GND for programming.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔌</span> FTDI → ESP32-CAM <span class="card-sub">Programming only — disconnect during operation</span></div>
+    <table>
+      <tr><th>FTDI Pin</th><th>ESP32-CAM Pin</th><th>Why</th></tr>
+      <tr>
+        <td><span class="pin pin-ftdi">GND</span></td>
+        <td><span class="pin pin-cam">GND</span></td>
+        <td class="pin-note">Common ground — must connect first</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">TX</span></td>
+        <td><span class="pin pin-cam">GPIO3 / U0RXD</span></td>
+        <td class="pin-note">FTDI transmits → CAM receives (cross-connected)</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">RX</span></td>
+        <td><span class="pin pin-cam">GPIO1 / U0TXD</span></td>
+        <td class="pin-note">CAM transmits → FTDI receives</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">GPIO0</span></td>
+        <td><span class="pin pin-cam">GND</span></td>
+        <td class="pin-note"><b>Flash mode only</b> — bridge this pin to GND before upload, remove after, press RST</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔋</span> Power Rails</div>
+    <table>
+      <tr><th>Source</th><th>Destination</th><th>Why</th></tr>
+      <tr>
+        <td><span class="pin pin-ftdi">5V PSU +</span></td>
+        <td><span class="pin pin-cam">ESP32-CAM 5V</span></td>
+        <td class="pin-note">Camera needs stable 5V — FTDI can't supply this</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">5V PSU GND</span></td>
+        <td><span class="pin pin-cam">ESP32-CAM GND</span></td>
+        <td class="pin-note">Part of shared GND rail</td>
+      </tr>
+      <tr>
+        <td>USB → ESP32-S3 board</td>
+        <td>S3 dev board</td>
+        <td class="pin-note">S3 dev board has its own onboard regulator — USB power is fine</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">12V PSU +</span></td>
+        <td>Solenoid +</td>
+        <td class="pin-note">Solenoids typically need 9–12V coil voltage</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-ftdi">12V PSU GND</span></td>
+        <td>MOSFET Source → shared GND rail</td>
+        <td class="pin-note"><b>All GNDs must be tied together</b> — CAM GND, S3 GND, MOSFET Source</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>📡</span> UART Link — ESP32-CAM ↔ ESP32-S3 <span class="card-sub">921600 baud · always connected</span></div>
+    <table>
+      <tr><th>ESP32-CAM Pin</th><th>Direction</th><th>ESP32-S3 Pin</th><th>Signal</th></tr>
+      <tr>
+        <td><span class="pin pin-cam">GPIO12 (TX)</span></td>
+        <td style="text-align:center;color:var(--teal)">──────▶</td>
+        <td><span class="pin pin-s3">GPIO18 (RX)</span></td>
+        <td class="pin-note">Frame data — 4-byte header + JPEG body</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-cam">GPIO13 (RX)</span></td>
+        <td style="text-align:center;color:var(--purple)">◀──────</td>
+        <td><span class="pin pin-s3">GPIO17 (TX)</span></td>
+        <td class="pin-note">ACK byte — 0x4F (OK) or 0x46 (FAIL)</td>
+      </tr>
+      <tr>
+        <td><span class="pin pin-cam">GND</span></td>
+        <td style="text-align:center;color:var(--muted)">────────</td>
+        <td><span class="pin pin-s3">GND</span></td>
+        <td class="pin-note">Shared ground rail — required for UART signal reference</td>
+      </tr>
+    </table>
+    <div class="why" style="margin-top:12px">
+      <b>Why GPIO12/13 on the CAM?</b> These are the PSRAM SPI pins (MTDI/MTCK) on AI Thinker. Repurposing them means <code>psramFound()</code> returns false → camera falls back to QVGA in DRAM. That's fine — QVGA at quality 12 is ~20 KB, well within the 200 KB backend limit and transmits over UART in ~0.2 s. If you ever need VGA + PSRAM simultaneously, rewire to GPIO14/GPIO15 on the CAM and update <code>S3_UART_TX_PIN / S3_UART_RX_PIN</code> in <code>cam_firmware.ino</code> + <code>CAM_UART_RX_PIN / CAM_UART_TX_PIN</code> in <code>s3_gateway.ino</code>.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔒</span> Solenoid Circuit — ESP32-S3 GPIO10 → MOSFET → Solenoid</div>
+    <table>
+      <tr><th>Component</th><th>Connection</th><th>Notes</th></tr>
+      <tr>
+        <td><span class="pin pin-s3">GPIO10</span></td>
+        <td>→ MOSFET Gate (via 100Ω resistor)</td>
+        <td class="pin-note">Logic-level N-MOSFET (e.g. IRLZ44N). 100Ω limits gate current during switching.</td>
+      </tr>
+      <tr>
+        <td>MOSFET Drain</td>
+        <td>→ Solenoid −</td>
+        <td class="pin-note">Drain sinks current through solenoid coil</td>
+      </tr>
+      <tr>
+        <td>Solenoid +</td>
+        <td>→ 12V supply +</td>
+        <td class="pin-note">Coil + always connected to 12V</td>
+      </tr>
+      <tr>
+        <td>Flyback diode</td>
+        <td>Cathode → 12V, Anode → Drain</td>
+        <td class="pin-note"><b>Required.</b> Solenoid is an inductor — de-energising generates a voltage spike that kills the MOSFET without this (1N4007 works).</td>
+      </tr>
+      <tr>
+        <td>MOSFET Source</td>
+        <td>→ Shared GND rail</td>
+        <td class="pin-note">Must share GND with S3 and CAM</td>
+      </tr>
+      <tr>
+        <td>Gate pull-down</td>
+        <td>10 kΩ from Gate to GND</td>
+        <td class="pin-note">Holds gate LOW during S3 boot so solenoid doesn't fire on startup</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ PROTO ══ -->
+<div id="proto" class="section">
+
+  <div class="card">
+    <div class="card-title"><span>📡</span> CAM → S3 Frame Protocol</div>
+    <p>The protocol is intentionally minimal — no framing overhead, no checksums. UART at 921600 baud over a 10 cm wire is reliable; checksums add code complexity with essentially zero real benefit at this distance.</p>
+
+    <div class="proto" style="margin:14px 0">
+      <div class="proto-row">
+        <div class="proto-label">CAM → S3</div>
+        <div class="proto-body">
+          <span class="byte byte-len">byte 0</span>
+          <span class="byte byte-len">byte 1</span>
+          <span class="byte byte-len">byte 2</span>
+          <span class="byte byte-len">byte 3</span>
+          <span style="color:var(--muted);font-size:12px;margin:0 6px">← big-endian uint32 frame length →</span>
+          <span class="byte byte-data">byte 0</span>
+          <span class="byte byte-data">byte 1</span>
+          <span style="color:var(--muted);font-size:12px">…</span>
+          <span class="byte byte-data">byte N</span>
+          <span style="color:var(--muted);font-size:12px;margin-left:6px">← raw JPEG body (N bytes) →</span>
+        </div>
+      </div>
+      <div class="proto-row">
+        <div class="proto-label">S3 → CAM</div>
+        <div class="proto-body">
+          <span class="byte byte-ack-ok">0x4F 'O'</span>
+          <span style="color:var(--green);font-size:12px;margin:0 8px">ACK OK — ride confirmed, solenoid fired</span>
+          <span style="color:var(--muted);font-size:11px">or</span>
+          <span class="byte byte-ack-fail" style="margin-left:8px">0x46 'F'</span>
+          <span style="color:var(--red);font-size:12px;margin-left:8px">ACK FAIL — QR not decoded or backend error</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="why">
+      <b>Why big-endian uint32 header?</b> The S3 reads exactly 4 bytes, reassembles the length with bit-shifts, then calls <code>Serial1.readBytes(buf, length)</code> exactly once. No delimiter scanning, no state machine — the receiver always knows precisely how many bytes to wait for.
+    </div>
+    <div class="why" style="margin-top:8px">
+      <b>Why 921600 baud?</b> A 20 KB QVGA frame at 921600 baud (≈ 92 KB/s) takes ~0.22 s. At 115200 baud it would take 1.74 s — too slow for a responsive unlock. 921600 is a standard ESP32 UART speed; 1 Mbaud and above needs clock tuning and is unreliable at 3.3V over >30 cm wires.
+    </div>
+    <div class="why" style="margin-top:8px">
+      <b>Why send ACK before solenoid?</b> <code>triggerSolenoid()</code> blocks for 3000 ms. Sending the ACK byte first lets the CAM enter its 3 s cooldown immediately and in parallel, so the next scan cycle is ready the moment the solenoid closes — no extra latency.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>⏱</span> Timing Budget (QVGA, quality 12)</div>
+    <table>
+      <tr><th>Stage</th><th>Typical time</th><th>Notes</th></tr>
+      <tr>
+        <td>OV2640 capture</td>
+        <td style="color:var(--green)">~40 ms</td>
+        <td class="pin-note">No WiFi competing for bus → stable</td>
+      </tr>
+      <tr>
+        <td>UART transfer (20 KB @ 921600)</td>
+        <td style="color:var(--green)">~220 ms</td>
+        <td class="pin-note">Includes 4-byte header</td>
+      </tr>
+      <tr>
+        <td>Backend cv2 decode (pass 1)</td>
+        <td style="color:var(--green)">~15 ms</td>
+        <td class="pin-note">Fast path for clean frames</td>
+      </tr>
+      <tr>
+        <td>Backend pyzbar fallback (pass 3/4)</td>
+        <td style="color:var(--amber)">~80 ms</td>
+        <td class="pin-note">Only when cv2 fails</td>
+      </tr>
+      <tr>
+        <td>HTTP round-trip (same LAN)</td>
+        <td style="color:var(--amber)">~50–200 ms</td>
+        <td class="pin-note">Varies with WiFi environment</td>
+      </tr>
+      <tr>
+        <td>ACK byte back to CAM</td>
+        <td style="color:var(--green)">&lt;1 ms</td>
+        <td class="pin-note">Single byte over UART</td>
+      </tr>
+      <tr>
+        <td style="font-weight:700;color:var(--text)">Total (happy path)</td>
+        <td style="color:var(--green);font-weight:700">~500–600 ms</td>
+        <td class="pin-note">From capture trigger to solenoid open</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔄</span> Retry Logic</div>
+    <div class="flow" style="font-size:11px;line-height:1.9">
+<span class="fc">CAM</span>                                              <span class="fp">S3</span>
+ │                                                    │
+ ├─ capture frame ─────────────────────────────────▶  │
+ ├─ send header + JPEG ────────────────────────────▶  │
+ │                                          POST to backend
+ │                                          backend returns 422 (QR not found)
+ │◀─────────────────────── ACK_FAIL (0x46) ──────────┤
+ │
+ ├─ [attempt 2] capture fresh frame ───────────────▶  │
+ ├─ send header + JPEG ────────────────────────────▶  │
+ │                                          backend returns 200
+ │◀─────────────────────── ACK_OK (0x4F) ────────────┤
+ │                                                    │── GPIO10 HIGH → solenoid
+ │  LED blink ×3                                      │── delay 3000 ms
+ │  cool-down delay 3s                               │── GPIO10 LOW
+    </div>
+    <div class="why" style="margin-top:10px">
+      <b>409 / 410 (token expired or reused):</b> S3 sends FAIL but CAM will still exhaust its 3 retries and back off. A new token must be generated in the app. There's no special fast-exit path on the CAM side because it doesn't understand HTTP status codes — only OK/FAIL.
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ FLASH ══ -->
+<div id="flash" class="section">
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>📷</span> Flashing ESP32-CAM (cam_firmware.ino)</div>
+      <div class="alert alert-warn" style="margin-bottom:12px">
+        <div class="alert-icon">⚠️</div>
+        <div>GPIO0 must be tied to GND <b>before</b> powering up or pressing RST to enter flash mode. Remove the wire and press RST after upload completes.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Install ESP32 board package</div>
+            <div class="step-desc">Arduino IDE → File → Preferences → Additional Boards Manager URLs:<br><code>https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json</code><br>Then: Boards Manager → search <code>esp32</code> → Install <b>Espressif Systems</b></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Select board &amp; port</div>
+            <div class="step-desc">Tools → Board → <b>AI Thinker ESP32-CAM</b><br>Tools → Port → select the FTDI COM port</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Wire FTDI + bridge GPIO0 to GND</div>
+            <div class="step-desc">Connect FTDI TX→GPIO3, RX→GPIO1, GND→GND. Bridge GPIO0→GND. Power via external 5V PSU.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Open cam_firmware.ino and upload</div>
+            <div class="step-desc">No config needed in this file. Click Upload. Wait for <em>"Hard resetting via RTS pin…"</em></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Remove GPIO0 bridge, press RST</div>
+            <div class="step-desc">Serial Monitor at 115200 should show:<br><code>[VELO-CAM] Booting…</code><br><code>[CAM] Init OK</code><br><code>[CAM] Settling…………… done</code><br><code>[VELO-CAM] Ready — scanning</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>🌐</span> Flashing ESP32-S3 (s3_gateway.ino)</div>
+      <div class="alert alert-ok" style="margin-bottom:12px">
+        <div class="alert-icon">✅</div>
+        <div>The S3 has native USB — plug it straight into the Arduino laptop. No FTDI needed. It appears as a COM port immediately.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Fill in your config at the top of the file</div>
+            <pre>WIFI_SSID     = "your_network"
+WIFI_PASSWORD = "your_password"
+DOCK_ID       = "3fa85f64-..."
+BACKEND_HOST  = "192.168.1.X"</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Select board &amp; settings</div>
+            <div class="step-desc">
+              Board: <code>ESP32S3 Dev Module</code><br>
+              USB Mode: <code>USB-OTG (TinyUSB)</code> or <code>Hardware CDC and JTAG</code><br>
+              Upload Mode: <code>UART0 / Hardware CDC</code><br>
+              PSRAM: <code>OPI PSRAM</code> (if your board has it)
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Upload and open Serial Monitor</div>
+            <div class="step-desc">Expected boot output:<br><code>[VELO-S3] Gateway booting…</code><br><code>[UART] Serial1 up at 921600 baud</code><br><code>[VELO-S3] Frame buffer: 195 KB allocated</code><br><code>[WiFi] Connected — IP: 192.168.1.Y</code><br><code>[VELO-S3] Ready — waiting for frames</code></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Verify solenoid circuit before live test</div>
+            <div class="step-desc">In Arduino Serial Monitor, send <code>0x4F</code> or temporarily add <code>triggerSolenoid()</code> to setup() to verify the MOSFET and solenoid click. Then remove the test line.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info" style="margin-top:4px">
+    <div class="alert-icon">💡</div>
+    <div><b>Flash order doesn't matter</b> — each chip boots independently. The CAM will just send frames into the void until the S3 is up and ready to receive. The S3 will sit in <code>receiveFrame()</code> with a 30 s header timeout, looping harmlessly until the CAM starts sending.</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ BACKEND ══ -->
+<div id="backend" class="section">
+
+  <div class="card">
+    <div class="card-title"><span>🖥</span> Backend Setup (Laptop 1)</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Drop the fixed files into place</div>
+          <pre>backend/app/dock_vision/router.py   ← replace
+backend/app/dock_vision/service.py  ← replace
+backend/scripts/test_scan.py        ← new file</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Install new dependency (Pillow)</div>
+          <pre>cd backend
+pip install -r requirements/base.txt
+# Or just: pip install Pillow==10.4.0
+# pyzbar should already be installed; if not: pip install pyzbar
+# Ubuntu also needs: sudo apt install libzbar0</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Start the backend on 0.0.0.0</div>
+          <pre>cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000</pre>
+          <div class="step-desc"><b>Must use <code>--host 0.0.0.0</code></b> — default <code>127.0.0.1</code> only accepts connections from the same machine. The S3 connects from a different device on the same network.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Find Laptop 1's local IP and put it in s3_gateway.ino</div>
+          <pre># macOS / Linux
+ifconfig | grep "inet " | grep -v 127.0.0.1
+
+# Windows
+ipconfig | findstr "IPv4"</pre>
+          <div class="step-desc">Copy the <code>192.168.x.x</code> address into <code>BACKEND_HOST</code> in <code>s3_gateway.ino</code> before flashing.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Get a dock UUID for the DOCK_ID constant</div>
+          <pre>curl http://localhost:8000/api/v1/docks
+# Look for the "id" field of the dock you're setting up</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔒</span> What the Backend Does on Each Scan Request</div>
+    <div class="flow" style="font-size:11px;line-height:2">
+POST /api/v1/docks/{dock_id}/scan
+        │
+        ├─ <span class="fa">rate check</span>     20/minute per IP  →  429 if exceeded
+        ├─ <span class="fa">Content-Type</span>   must contain "image"  →  415 if not
+        ├─ <span class="fa">size guard</span>     1 KB ≤ body ≤ 200 KB  →  422 / 413 if outside range
+        │
+        ├─ <span class="fc">Pass 1</span>  cv2.QRCodeDetector on raw grayscale
+        ├─ <span class="fc">Pass 2</span>  cv2 on GaussianBlur + adaptiveThreshold image
+        ├─ <span class="fc">Pass 3</span>  pyzbar on raw grayscale PIL image
+        ├─ <span class="fc">Pass 4</span>  pyzbar on enhanced PIL image
+        │         any pass succeeds → ride_token extracted
+        │         all fail → audit DOCK_SCAN_FAIL, return 422
+        │
+        └─ <span class="fg">confirm_ride(ride_token, dock_id)</span>
+                  → checks token signature, TTL, replay protection (Redis SETNX)
+                  → creates Ride record, sets status ACTIVE
+                  → audit DOCK_SCAN_SUCCESS
+                  → 200 {ride: {...}}
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════ TEST ══ -->
+<div id="test" class="section">
+
+  <div class="card">
+    <div class="card-title"><span>🧪</span> Testing Without Physical Hardware</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Install test script dependencies (Arduino laptop)</div>
+          <pre>pip install requests qrcode pillow pyserial</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Smoke-test endpoint guards — no hardware needed</div>
+          <pre>python test_scan.py --host 192.168.1.X --dock YOUR_DOCK_UUID --smoke</pre>
+          <div class="step-desc">Verifies 4 guards are working: Content-Type rejection (415), empty body (422), tiny body (422), oversized body (413). Should show <b>4/4 passed</b>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Generate a QR from a ride token and scan it end-to-end</div>
+          <pre># Get a token from the Flutter app QR screen, or from backend logs
+python test_scan.py \
+  --host 192.168.1.X \
+  --dock YOUR_DOCK_UUID \
+  --token "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."</pre>
+          <div class="step-desc">Generates a <code>test_qr_generated.png</code> → POSTs it to the backend → ride should activate. <b>200 + "✅ Ride activated!"</b> means the full backend pipeline works.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Test with a real QR image from the Flutter app</div>
+          <pre># Screenshot the QR unlock screen → save as qr.png
+python test_scan.py \
+  --host 192.168.1.X \
+  --dock YOUR_DOCK_UUID \
+  --image qr.png</pre>
+          <div class="step-desc">Use this to verify that pyzbar can decode a phone-screenshot QR at various sizes and qualities before the ESP32-CAM hardware is involved.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Monitor S3 serial output live</div>
+          <pre># S3 appears as a CDC COM port — no FTDI needed
+python test_scan.py \
+  --host 192.168.1.X \
+  --dock YOUR_DOCK_UUID \
+  --monitor COM4        # Windows
+  # or --monitor /dev/ttyACM0   # Linux</pre>
+          <div class="step-desc">Streams everything the S3 prints. Watch for <code>[UART] Header received</code> → <code>[HTTP] 200</code> → <code>[LOCK] UNLOCKING</code> as a frame goes through.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>✅</span> Full Physical Test Checklist</div>
+    <table>
+      <tr><th>#</th><th>What to check</th><th>Expected</th></tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">1</td>
+        <td class="pin-note">Backend running on Laptop 1 (<code>0.0.0.0:8000</code>)</td>
+        <td><span class="tag tag-green">GET /docks returns 200</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">2</td>
+        <td class="pin-note">S3 booted and WiFi connected</td>
+        <td><span class="tag tag-blue">Serial shows IP address</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">3</td>
+        <td class="pin-note">CAM booted and UART link live</td>
+        <td><span class="tag tag-teal">Serial shows "Ready — scanning"</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">4</td>
+        <td class="pin-note">Smoke test passes</td>
+        <td><span class="tag tag-green">4/4 passed</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">5</td>
+        <td class="pin-note">Token test from laptop activates ride</td>
+        <td><span class="tag tag-green">HTTP 200 + ride ACTIVE</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">6</td>
+        <td class="pin-note">Hold phone QR to camera</td>
+        <td><span class="tag tag-teal">S3 serial: UNLOCKING → solenoid clicks</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">7</td>
+        <td class="pin-note">Flutter app transitions to ride tracking</td>
+        <td><span class="tag tag-purple">RideTrackingScreen shown</span></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);font-size:12px">8</td>
+        <td class="pin-note">Re-use same token</td>
+        <td><span class="tag tag-red">409 — replay blocked</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🔍</span> Common Issues &amp; Fixes</div>
+    <table>
+      <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+      <tr>
+        <td class="pin-note">S3: "Frame too small" in serial</td>
+        <td class="pin-note">CAM GPIO0 still grounded (boot loop)</td>
+        <td class="pin-note">Remove GPIO0-GND wire, press RST on CAM</td>
+      </tr>
+      <tr>
+        <td class="pin-note">S3: "Body timeout" — got X/Y bytes</td>
+        <td class="pin-note">UART wires swapped (TX→TX or RX→RX)</td>
+        <td class="pin-note">GPIO12 (CAM TX) → GPIO18 (S3 RX). Not GPIO12→GPIO17.</td>
+      </tr>
+      <tr>
+        <td class="pin-note">Backend 422 on every scan</td>
+        <td class="pin-note">Phone screen too bright / glare / tilt</td>
+        <td class="pin-note">Reduce screen brightness, hold phone perpendicular to camera</td>
+      </tr>
+      <tr>
+        <td class="pin-note">S3: no WiFi after reboot</td>
+        <td class="pin-note">Wrong SSID/password in s3_gateway.ino</td>
+        <td class="pin-note">Reflash with correct credentials; also check 2.4 GHz (S3 doesn't support 5 GHz)</td>
+      </tr>
+      <tr>
+        <td class="pin-note">Solenoid doesn't click on 200</td>
+        <td class="pin-note">Missing GND pull-down on MOSFET gate</td>
+        <td class="pin-note">Add 10 kΩ from MOSFET Gate to GND; verify 12V supply is on</td>
+      </tr>
+      <tr>
+        <td class="pin-note">CAM: "Camera init FAILED after 3 attempts"</td>
+        <td class="pin-note">Power brownout or I2C glitch</td>
+        <td class="pin-note">Check 5V PSU current rating (≥1 A). Retry; if persistent check OV2640 cable seating</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+
+<script>
+function show(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>

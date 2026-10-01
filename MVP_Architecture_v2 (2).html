@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zova MVP — Architecture & Team Split</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #07090F;
+  --surface:  #0D1018;
+  --s2:       #121620;
+  --s3:       #181D28;
+  --border:   #1E2436;
+  --border-s: #161B28;
+  --text:     #E2E8F4;
+  --muted:    #7D8AA3;
+  --muted2:   #4A5368;
+  --lime:     #C6F135;
+  --lime-dim: rgba(198,241,53,.08);
+  --lime-glow:rgba(198,241,53,.18);
+  --sky:      #38BDF8;
+  --sky-dim:  rgba(56,189,248,.08);
+  --rose:     #FB7185;
+  --rose-dim: rgba(251,113,133,.08);
+  --violet:   #A78BFA;
+  --violet-dim:rgba(167,139,250,.08);
+  --amber:    #FBBF24;
+  --amber-dim:rgba(251,191,36,.08);
+  --r:        8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'DM Sans',sans-serif;
+  font-size:14px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'JetBrains Mono',monospace}
+.display{font-family:'Syne',sans-serif}
+
+/* ===== LAYOUT ===== */
+.shell{display:flex;height:100vh;overflow:hidden}
+
+/* RAIL */
+.rail{
+  width:240px;flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.rail-head{
+  padding:20px 18px 16px;
+  border-bottom:1px solid var(--border-s);
+}
+.brand-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.brand-icon{
+  width:32px;height:32px;border-radius:8px;
+  background:linear-gradient(135deg,var(--lime) 0%,#8FDB00 100%);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.brand-icon svg{width:17px;height:17px}
+.brand-name{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;letter-spacing:-.3px}
+.brand-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px}
+
+.status-bar{
+  display:flex;align-items:center;gap:6px;
+  background:var(--s2);border:1px solid var(--border);
+  border-radius:6px;padding:6px 10px;
+}
+.pulse{
+  width:7px;height:7px;border-radius:50%;background:var(--lime);flex-shrink:0;
+  animation:pulseAnim 2s infinite;
+}
+@keyframes pulseAnim{
+  0%,100%{box-shadow:0 0 0 0 rgba(198,241,53,.5)}
+  50%{box-shadow:0 0 0 5px rgba(198,241,53,0)}
+}
+.status-txt{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);flex:1}
+.status-badge{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--lime);background:var(--lime-dim);padding:2px 6px;border-radius:4px}
+
+.rail-nav{flex:1;overflow-y:auto;padding:10px 10px 10px}
+.nav-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;padding:8px 8px 4px}
+
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  width:100%;text-align:left;border:none;cursor:pointer;
+  background:transparent;color:var(--muted);
+  padding:9px 10px;border-radius:var(--r);margin-bottom:1px;
+  transition:all .12s ease;position:relative;
+  font-family:'DM Sans',sans-serif;font-size:13px;
+}
+.nav-item:hover{background:var(--s2);color:var(--text)}
+.nav-item.active{background:var(--s3);color:var(--text)}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:25%;bottom:25%;
+  width:2px;border-radius:2px;background:var(--lime);
+}
+.nav-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;opacity:.5}
+.nav-item.active .nav-dot{opacity:1}
+.nav-item .nav-lbl{font-weight:500;line-height:1.2}
+.nav-item .nav-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);margin-top:1px}
+.nav-item.active .nav-sub{color:var(--muted)}
+
+.rail-foot{
+  padding:14px 18px;border-top:1px solid var(--border-s);
+  display:flex;flex-direction:column;gap:6px;
+}
+.cost-row{display:flex;justify-content:space-between;align-items:center}
+.cost-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2)}
+.cost-val{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--lime)}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;position:relative}
+.panel{display:none;padding:36px 44px 60px;min-height:100%;animation:fadeIn .2s ease}
+.panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* TYPOGRAPHY */
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--lime);text-transform:uppercase;letter-spacing:1.2px;
+  margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.eyebrow::after{content:'';flex:1;max-width:60px;height:1px;background:var(--lime-dim)}
+.page-title{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:30px;line-height:1.15;letter-spacing:-.5px;
+  margin-bottom:10px;
+}
+.page-lead{color:var(--muted);font-size:14px;line-height:1.7;max-width:640px;margin-bottom:32px}
+
+.section-title{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:16px;
+  margin:32px 0 14px;display:flex;align-items:center;gap:10px;color:var(--text);
+}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* CARDS */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:20px 22px;
+}
+.card+.card{margin-top:12px}
+
+/* GRID */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+
+/* TECH CHIP */
+.chip-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border-radius:6px;padding:5px 10px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;
+  border:1px solid transparent;transition:all .12s;cursor:default;
+}
+.chip.keep{background:rgba(198,241,53,.07);border-color:rgba(198,241,53,.2);color:var(--lime)}
+.chip.replace{background:rgba(251,113,133,.07);border-color:rgba(251,113,133,.2);color:var(--rose)}
+.chip.new{background:rgba(56,189,248,.07);border-color:rgba(56,189,248,.2);color:var(--sky)}
+.chip.neutral{background:var(--s2);border-color:var(--border);color:var(--muted)}
+
+/* DECISION TABLE */
+.dtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.dtable th{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.6px;color:var(--muted2);padding:8px 12px;text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.dtable td{padding:10px 12px;border-bottom:1px solid var(--border-s);vertical-align:top}
+.dtable tr:last-child td{border-bottom:none}
+.dtable tr:hover td{background:var(--s2)}
+.badge{
+  display:inline-block;padding:2px 8px;border-radius:4px;
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;
+}
+.badge.keep{background:var(--lime-dim);color:var(--lime);border:1px solid rgba(198,241,53,.2)}
+.badge.swap{background:var(--rose-dim);color:var(--rose);border:1px solid rgba(251,113,133,.2)}
+.badge.free{background:var(--sky-dim);color:var(--sky);border:1px solid rgba(56,189,248,.2)}
+
+/* CALLOUT */
+.callout{
+  border-radius:10px;padding:14px 18px;font-size:13px;
+  line-height:1.6;margin:14px 0;display:flex;gap:12px;align-items:flex-start;
+}
+.callout.lime{background:var(--lime-dim);border:1px solid rgba(198,241,53,.15);color:var(--lime)}
+.callout.sky{background:var(--sky-dim);border:1px solid rgba(56,189,248,.15);color:var(--sky)}
+.callout.rose{background:var(--rose-dim);border:1px solid rgba(251,113,133,.15);color:var(--rose)}
+.callout.violet{background:var(--violet-dim);border:1px solid rgba(167,139,250,.15);color:var(--violet)}
+.callout.amber{background:var(--amber-dim);border:1px solid rgba(251,191,36,.15);color:var(--amber)}
+.callout-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+
+/* ARCH FLOW */
+.flow-h{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.flow-node{
+  background:var(--s2);border:1px solid var(--border);
+  border-radius:8px;padding:8px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  text-align:center;white-space:nowrap;
+}
+.flow-node.accent{background:var(--lime-dim);border-color:rgba(198,241,53,.3);color:var(--lime)}
+.flow-node.sky{background:var(--sky-dim);border-color:rgba(56,189,248,.3);color:var(--sky)}
+.flow-node.rose{background:var(--rose-dim);border-color:rgba(251,113,133,.3);color:var(--rose)}
+.flow-node.violet{background:var(--violet-dim);border-color:rgba(167,139,250,.3);color:var(--violet)}
+.flow-arrow{color:var(--muted2);font-size:14px;padding:0 6px;flex-shrink:0}
+
+/* PHASE TABLE */
+.phase-grid{display:grid;grid-template-columns:auto 1fr 1fr;gap:1px;background:var(--border);border-radius:10px;overflow:hidden}
+.phase-cell{background:var(--surface);padding:14px 16px;font-size:12.5px}
+.phase-cell.head{background:var(--s2);font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted2)}
+.phase-label{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;white-space:nowrap}
+.phase-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);margin-top:2px}
+
+/* TRACK CARDS */
+.tracks{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+.track{
+  border-radius:12px;padding:22px;
+  border:1px solid var(--border);position:relative;overflow:hidden;
+}
+.track::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+}
+.track.a::before{background:linear-gradient(90deg,var(--lime),#8FDB00)}
+.track.b::before{background:linear-gradient(90deg,var(--sky),#0EA5E9)}
+.track.a{background:linear-gradient(160deg,rgba(198,241,53,.04) 0%,var(--surface) 60%)}
+.track.b{background:linear-gradient(160deg,rgba(56,189,248,.04) 0%,var(--surface) 60%)}
+.track-tag{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;
+  display:inline-flex;align-items:center;gap:5px;margin-bottom:12px;
+}
+.track.a .track-tag{color:var(--lime)}
+.track.b .track-tag{color:var(--sky)}
+.track-title{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;margin-bottom:16px;line-height:1.2}
+.track-list{list-style:none;display:flex;flex-direction:column;gap:8px}
+.track-list li{
+  display:flex;align-items:flex-start;gap:8px;
+  font-size:12.5px;color:var(--muted);line-height:1.5;
+}
+.track-list li::before{content:'→';flex-shrink:0;margin-top:1px;font-family:'JetBrains Mono',monospace;font-size:10px}
+.track.a .track-list li::before{color:var(--lime)}
+.track.b .track-list li::before{color:var(--sky)}
+.track-list strong{color:var(--text)}
+
+/* COST VISUAL */
+.cost-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cost-stage{
+  background:var(--s2);border:1px solid var(--border);border-radius:10px;
+  padding:16px;text-align:center;
+}
+.cost-amount{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;margin-bottom:4px}
+.cost-stage-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.cost-items{font-size:11px;color:var(--muted);line-height:1.6}
+.cost-stage.free .cost-amount{color:var(--lime)}
+.cost-stage.mid .cost-amount{color:var(--amber)}
+.cost-stage.full .cost-amount{color:var(--rose)}
+
+/* DEPLOYMENT DIAGRAM */
+.deploy-box{
+  background:var(--s2);border:1px solid var(--border);border-radius:8px;
+  padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  display:inline-block;
+}
+.deploy-col{display:flex;flex-direction:column;align-items:center;gap:6px}
+.deploy-row{display:flex;align-items:center;justify-content:center;gap:8px}
+.deploy-vline{width:1px;height:20px;background:var(--border);margin:0 auto}
+.deploy-hline{height:1px;width:30px;background:var(--border);flex-shrink:0}
+
+/* MIGRATION PATH */
+.mig-row{display:flex;gap:0;align-items:stretch}
+.mig-stage{
+  flex:1;border:1px solid var(--border);background:var(--surface);
+  padding:16px;position:relative;
+}
+.mig-stage:first-child{border-radius:10px 0 0 10px}
+.mig-stage:last-child{border-radius:0 10px 10px 0}
+.mig-stage+.mig-stage{border-left:none}
+.mig-stage-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.mig-stage-title{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:8px}
+.mig-items{font-size:11.5px;color:var(--muted);line-height:1.7}
+.mig-stage.s1 .mig-stage-lbl{color:var(--lime)}
+.mig-stage.s2 .mig-stage-lbl{color:var(--amber)}
+.mig-stage.s3 .mig-stage-lbl{color:var(--rose)}
+.mig-arrow-box{
+  display:flex;align-items:center;color:var(--muted2);font-size:18px;padding:0 2px;flex-shrink:0;
+}
+
+/* HERO SECTION */
+.hero-bg{
+  position:relative;
+  background:linear-gradient(135deg,rgba(198,241,53,.04) 0%,transparent 50%);
+  border:1px solid var(--border);border-radius:16px;
+  padding:32px 36px;margin-bottom:28px;overflow:hidden;
+}
+.hero-bg::after{
+  content:'';position:absolute;top:-60px;right:-60px;
+  width:200px;height:200px;border-radius:50%;
+  background:radial-gradient(circle,rgba(198,241,53,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.stat-row{display:flex;gap:28px;margin-top:20px;flex-wrap:wrap}
+.stat{text-align:left}
+.stat-val{font-family:'Syne',sans-serif;font-weight:800;font-size:24px;line-height:1}
+.stat-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+.stat-val.lime{color:var(--lime)}
+.stat-val.sky{color:var(--sky)}
+.stat-val.rose{color:var(--rose)}
+
+/* MISC */
+.muted{color:var(--muted)}
+.tag{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9.5px;
+  padding:2px 7px;border-radius:4px;
+}
+.tag.lime{background:var(--lime-dim);color:var(--lime)}
+.tag.sky{background:var(--sky-dim);color:var(--sky)}
+.tag.rose{background:var(--rose-dim);color:var(--rose)}
+.tag.violet{background:var(--violet-dim);color:var(--violet)}
+.tag.amber{background:var(--amber-dim);color:var(--amber)}
+.tag.neutral{background:var(--s3);color:var(--muted)}
+
+ul.plain{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+ul.plain li{display:flex;align-items:flex-start;gap:8px}
+ul.plain li::before{content:'·';color:var(--lime);flex-shrink:0;font-family:'JetBrains Mono',monospace}
+ul.plain li strong{color:var(--text)}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted2)}
+
+/* BRIDGE */
+.bridge{
+  display:flex;align-items:center;justify-content:center;
+  background:var(--s3);border:1px solid var(--border);border-radius:8px;
+  padding:8px 16px;gap:8px;font-size:12px;color:var(--muted);margin-top:10px;
+}
+.bridge span.l{color:var(--lime);font-family:'JetBrains Mono',monospace;font-size:10px}
+.bridge span.r{color:var(--sky);font-family:'JetBrains Mono',monospace;font-size:10px}
+.bridge-divider{color:var(--muted2);font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ===== RAIL ===== -->
+<aside class="rail">
+  <div class="rail-head">
+    <div class="brand-row">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="8" r="3" fill="#07090F"/>
+          <path d="M5 20c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#07090F" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="7" cy="14" r="1.5" fill="#07090F"/>
+          <circle cx="17" cy="14" r="1.5" fill="#07090F"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">ZOVA</div>
+        <div class="brand-sub">Micromobility MVP</div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="pulse"></div>
+      <div class="status-txt">MVP Architecture v3</div>
+      <div class="status-badge">Updated</div>
+    </div>
+  </div>
+
+  <div class="rail-nav">
+    <div class="nav-label">Sections</div>
+
+    <button class="nav-item active" onclick="show('overview',this)">
+      <span class="nav-dot" style="background:var(--lime)"></span>
+      <div>
+        <div class="nav-lbl">Overview</div>
+        <div class="nav-sub">Stack summary</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('stack',this)">
+      <span class="nav-dot" style="background:var(--sky)"></span>
+      <div>
+        <div class="nav-lbl">Tech Decisions</div>
+        <div class="nav-sub">Keep · Replace · Why</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('deploy',this)">
+      <span class="nav-dot" style="background:var(--violet)"></span>
+      <div>
+        <div class="nav-lbl">Deployment</div>
+        <div class="nav-sub">Oracle → Hetzner path</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('arch',this)">
+      <span class="nav-dot" style="background:var(--amber)"></span>
+      <div>
+        <div class="nav-lbl">Architecture</div>
+        <div class="nav-sub">System flow + IoT</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('split',this)">
+      <span class="nav-dot" style="background:var(--rose)"></span>
+      <div>
+        <div class="nav-lbl">Team Split</div>
+        <div class="nav-sub">Track A & B · 5 phases</div>
+      </div>
+    </button>
+
+    <div class="nav-label" style="margin-top:8px">Extended Docs</div>
+
+    <button class="nav-item" onclick="show('security',this)">
+      <span class="nav-dot" style="background:var(--rose)"></span>
+      <div>
+        <div class="nav-lbl">Cybersecurity</div>
+        <div class="nav-sub">Mobile · API · Backend</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('database',this)">
+      <span class="nav-dot" style="background:var(--sky)"></span>
+      <div>
+        <div class="nav-lbl">Database Design</div>
+        <div class="nav-sub">Tables · Schema · Ledger</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('qrsecurity',this)">
+      <span class="nav-dot" style="background:var(--lime)"></span>
+      <div>
+        <div class="nav-lbl">QR Security</div>
+        <div class="nav-sub">Flow · Expiry · Anti-reuse</div>
+      </div>
+    </button>
+
+    <button class="nav-item" onclick="show('bom',this)">
+      <span class="nav-dot" style="background:var(--amber)"></span>
+      <div>
+        <div class="nav-lbl">Hardware & Cost</div>
+        <div class="nav-sub">BOM · Budget · Scaling</div>
+      </div>
+    </button>
+  </div>
+
+  <div class="rail-foot">
+    <div class="cost-row">
+      <div class="cost-lbl">MVP / month</div>
+      <div class="cost-val">₹0–500</div>
+    </div>
+    <div class="cost-row">
+      <div class="cost-lbl">Pilot / month</div>
+      <div class="cost-val">₹1,500–3,000</div>
+    </div>
+    <div class="cost-row">
+      <div class="cost-lbl">Open source</div>
+      <div class="cost-val">~90–95%</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<main class="main">
+
+  <!-- ========== OVERVIEW ========== -->
+  <div class="panel active" id="overview">
+    <div class="eyebrow">Dock-Based Smart Micromobility</div>
+    <h1 class="page-title">MVP Architecture — Version 2</h1>
+    <p class="page-lead">Updated stack after replacing all recurring-cost cloud services with open-source equivalents. 90–95% ownership, near-zero infrastructure cost through MVP and pilot phases.</p>
+
+    <div class="hero-bg">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--muted);margin-bottom:4px">GUIDING PRINCIPLE</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;line-height:1.3;max-width:540px">Validate the business model first. Infrastructure optimization comes after the first 500 users.</div>
+      <div class="stat-row">
+        <div class="stat"><div class="stat-val lime">₹0</div><div class="stat-lbl">Dev phase cost</div></div>
+        <div class="stat"><div class="stat-val sky">7</div><div class="stat-lbl">Services replaced</div></div>
+        <div class="stat"><div class="stat-val rose">3</div><div class="stat-lbl">Services kept</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--violet)">5</div><div class="stat-lbl">Build phases</div></div>
+      </div>
+    </div>
+
+    <div class="section-title">Final Stack at a Glance</div>
+
+    <div class="grid3">
+      <div class="card">
+        <div class="tag lime" style="margin-bottom:10px">Mobile</div>
+        <div class="chip-grid">
+          <div class="chip keep">Flutter</div>
+          <div class="chip keep">Firebase Auth</div>
+          <div class="chip keep">FCM</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Backend</div>
+        <div class="chip-grid">
+          <div class="chip keep">FastAPI</div>
+          <div class="chip keep">PostgreSQL</div>
+          <div class="chip keep">PostGIS</div>
+          <div class="chip keep">Redis</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tag violet" style="margin-bottom:10px">Payments</div>
+        <div class="chip-grid">
+          <div class="chip keep">Razorpay</div>
+          <div class="chip neutral">UPI · Cards · Netbanking</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid4">
+      <div class="card">
+        <div class="tag amber" style="margin-bottom:10px">Maps</div>
+        <div class="chip-grid">
+          <div class="chip new">OpenStreetMap</div>
+          <div class="chip new">Leaflet</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tag amber" style="margin-bottom:10px">Monitoring</div>
+        <div class="chip-grid">
+          <div class="chip new">Grafana</div>
+          <div class="chip new">Prometheus</div>
+          <div class="chip new">Loki</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tag amber" style="margin-bottom:10px">Storage & Ops</div>
+        <div class="chip-grid">
+          <div class="chip new">MinIO</div>
+          <div class="chip new">n8n</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tag amber" style="margin-bottom:10px">IoT / Security</div>
+        <div class="chip-grid">
+          <div class="chip new">Mosquitto</div>
+          <div class="chip new">Cloudflare</div>
+          <div class="chip new">Let's Encrypt</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout lime">
+      <div class="callout-icon">↑</div>
+      <div><strong>Keep</strong> = Firebase Auth, FCM, FastAPI, PostgreSQL, Redis, Razorpay — these have strong free tiers and save weeks of engineering time. <strong>Replace</strong> = AWS, Google Maps, CloudWatch, S3, EMQX — these all start billing early with little MVP benefit.</div>
+    </div>
+
+    <div class="section-title">Architecture in One Line</div>
+    <div class="card">
+      <div class="flow-h" style="gap:0;flex-wrap:wrap;row-gap:8px">
+        <div class="flow-node accent">Flutter App</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node sky">Cloudflare</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">Nginx</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node sky">FastAPI</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">PostgreSQL</div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-node">Redis</div>
+        <div class="flow-arrow">+</div>
+        <div class="flow-node violet">MQTT (later)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TECH DECISIONS ========== -->
+  <div class="panel" id="stack">
+    <div class="eyebrow">Technology Decisions</div>
+    <h1 class="page-title">Keep, Replace & Why</h1>
+    <p class="page-lead">Every decision is driven by one question: does this cost us money or time before we have paying users?</p>
+
+    <div class="card">
+      <table class="dtable">
+        <tr>
+          <th>Category</th>
+          <th>Original</th>
+          <th>Final Choice</th>
+          <th>Decision</th>
+          <th>Reason</th>
+        </tr>
+        <tr>
+          <td><strong>Auth</strong></td>
+          <td class="muted">Firebase Auth</td>
+          <td><strong>Firebase Auth</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">OTP + Google Login, free tier, saves 2–3 sprint weeks</td>
+        </tr>
+        <tr>
+          <td><strong>Push</strong></td>
+          <td class="muted">FCM</td>
+          <td><strong>Firebase Cloud Messaging</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">Free, production-proven, no alternative for MVP</td>
+        </tr>
+        <tr>
+          <td><strong>Backend</strong></td>
+          <td class="muted">FastAPI</td>
+          <td><strong>FastAPI + Python</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">Open source, async, ideal for ride/wallet APIs</td>
+        </tr>
+        <tr>
+          <td><strong>DB</strong></td>
+          <td class="muted">PostgreSQL</td>
+          <td><strong>PostgreSQL + PostGIS</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">Best for ledger payments, ride records, geo queries</td>
+        </tr>
+        <tr>
+          <td><strong>Cache</strong></td>
+          <td class="muted">Redis</td>
+          <td><strong>Redis</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">Fast session + ride-token + OTP storage</td>
+        </tr>
+        <tr>
+          <td><strong>Maps</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">Google Maps</td>
+          <td><strong>OpenStreetMap + Leaflet</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">Google bills after 28K req/month. Leaflet is 100% free & sufficient for pilot</td>
+        </tr>
+        <tr>
+          <td><strong>Hosting</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">AWS EC2/RDS</td>
+          <td><strong>Oracle Free Tier → Hetzner</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">₹0 MVP on Oracle, ₹1,200–2,000/mo Hetzner for pilot</td>
+        </tr>
+        <tr>
+          <td><strong>Monitoring</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">CloudWatch</td>
+          <td><strong>Grafana + Prometheus + Loki</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">Enterprise-grade open-source observability, self-hosted</td>
+        </tr>
+        <tr>
+          <td><strong>Storage</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">AWS S3</td>
+          <td><strong>MinIO</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">S3-compatible API, self-hosted, zero licensing cost</td>
+        </tr>
+        <tr>
+          <td><strong>Automation</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">Paid SaaS tools</td>
+          <td><strong>n8n</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">Open-source workflow automation, webhooks, notifications</td>
+        </tr>
+        <tr>
+          <td><strong>MQTT</strong></td>
+          <td class="muted" style="text-decoration:line-through;opacity:.5">EMQX Cloud</td>
+          <td><strong>Mosquitto</strong></td>
+          <td><span class="badge swap">REPLACE</span></td>
+          <td class="muted">Lightweight, free, sufficient until 50+ docks. Add EMQX later.</td>
+        </tr>
+        <tr>
+          <td><strong>Payments</strong></td>
+          <td class="muted">Razorpay</td>
+          <td><strong>Razorpay</strong></td>
+          <td><span class="badge keep">KEEP</span></td>
+          <td class="muted">Best India UPI + cards support, 2% per txn is fair at MVP</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout sky">
+      <div class="callout-icon">💡</div>
+      <div><strong>Why keep Firebase Auth?</strong> All business logic — ride management, payments, wallet, dock control — stays in FastAPI + PostgreSQL. Firebase only handles identity tokens. There is no meaningful vendor lock-in for the critical parts.</div>
+    </div>
+
+    <div class="section-title">When to move back to paid services</div>
+    <div class="mig-row">
+      <div class="mig-stage s1">
+        <div class="mig-stage-lbl">MVP Stage</div>
+        <div class="mig-stage-title">Oracle Free Tier</div>
+        <div class="mig-items">Docker Compose<br>Nginx · FastAPI<br>PostgreSQL · Redis<br>n8n · Grafana</div>
+      </div>
+      <div class="mig-arrow-box">→</div>
+      <div class="mig-stage s2">
+        <div class="mig-stage-lbl">Pilot Stage</div>
+        <div class="mig-stage-title">Hetzner VPS</div>
+        <div class="mig-items">+Mosquitto (hardware)<br>+MinIO (storage)<br>+Grafana dashboards<br>~₹1,500–3,000/mo</div>
+      </div>
+      <div class="mig-arrow-box">→</div>
+      <div class="mig-stage s3">
+        <div class="mig-stage-lbl">Scale Stage</div>
+        <div class="mig-stage-title">AWS / Azure / GCP</div>
+        <div class="mig-items">Oracle/Hetzner → AWS<br>MinIO → S3<br>Mosquitto → EMQX<br>Self-hosted → Managed</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== DEPLOYMENT ========== -->
+  <div class="panel" id="deploy">
+    <div class="eyebrow">Deployment Strategy</div>
+    <h1 class="page-title">Oracle → Hetzner → AWS</h1>
+    <p class="page-lead">Three phases, increasing cost and reliability. Spend nothing until real users demand it.</p>
+
+    <div class="cost-stages">
+      <div class="cost-stage free">
+        <div class="cost-stage-lbl">Phase 1 — Dev</div>
+        <div class="cost-amount">₹0</div>
+        <div class="cost-items">Local machine<br>Flutter · FastAPI<br>PostgreSQL · Redis<br>Test QR + wallet flow</div>
+      </div>
+      <div class="cost-stage mid">
+        <div class="cost-stage-lbl">Phase 2 — MVP Deploy</div>
+        <div class="cost-amount">₹0–500</div>
+        <div class="cost-items">Oracle Cloud Free Tier<br>Nginx · Docker Compose<br>FastAPI · PostgreSQL<br>Coolify for deploys</div>
+      </div>
+      <div class="cost-stage full">
+        <div class="cost-stage-lbl">Phase 3 — Pilot</div>
+        <div class="cost-amount">₹1,500–3,000</div>
+        <div class="cost-items">Hetzner VPS (4vCPU/8GB)<br>+Mosquitto · Grafana<br>+MinIO · n8n<br>Domain ~₹1,000/yr</div>
+      </div>
+    </div>
+
+    <div class="section-title">Deployment Toolchain</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="tag lime" style="margin-bottom:10px">Recommended — Coolify</div>
+        <ul class="plain">
+          <li>One-click Docker deployment</li>
+          <li>GitHub Actions integration built-in</li>
+          <li>Automatic SSL via Let's Encrypt</li>
+          <li>Environment variable management</li>
+          <li><strong>Free</strong> — no cost, no Kubernetes needed</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Workflow: Push to Deploy</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">
+          <div class="flow-node" style="text-align:left">git push → GitHub</div>
+          <div style="color:var(--lime);padding-left:8px">↓</div>
+          <div class="flow-node" style="text-align:left">GitHub Actions → Docker Build</div>
+          <div style="color:var(--lime);padding-left:8px">↓</div>
+          <div class="flow-node" style="text-align:left">Coolify → Server Deploy</div>
+          <div style="color:var(--lime);padding-left:8px">↓</div>
+          <div class="flow-node accent" style="text-align:left">Live — with SSL + Cloudflare</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Oracle vs Hetzner — Honest Comparison</div>
+    <div class="card">
+      <table class="dtable">
+        <tr>
+          <th>Factor</th>
+          <th>Oracle Free Tier</th>
+          <th>Hetzner VPS</th>
+        </tr>
+        <tr>
+          <td><strong>Cost</strong></td>
+          <td><span class="tag lime">₹0</span></td>
+          <td><span class="tag amber">₹900–2,000/mo</span></td>
+        </tr>
+        <tr>
+          <td><strong>Reliability</strong></td>
+          <td class="muted">Good, free-tier limits apply</td>
+          <td>Very good, predictable</td>
+        </tr>
+        <tr>
+          <td><strong>Setup ease</strong></td>
+          <td class="muted">Moderate (ARM quirks)</td>
+          <td>Excellent — SSH + Docker in minutes</td>
+        </tr>
+        <tr>
+          <td><strong>Best for</strong></td>
+          <td>MVP demo, incubator pitch, internal tests</td>
+          <td>Pilot with 50–500 real users</td>
+        </tr>
+        <tr>
+          <td><strong>Database</strong></td>
+          <td class="muted">Works, some free-tier friction</td>
+          <td>Straightforward PostgreSQL</td>
+        </tr>
+        <tr>
+          <td><strong>Verdict</strong></td>
+          <td><span class="tag lime">Start here</span></td>
+          <td><span class="tag amber">Move here when pilot starts</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout violet">
+      <div class="callout-icon">💰</div>
+      <div>The money saved on Oracle Free Tier vs paying for AWS should go straight into <strong>hardware prototyping</strong> — dock structure, QR scanners, solenoids, locks. That's the actual project risk, not server costs.</div>
+    </div>
+  </div>
+
+  <!-- ========== ARCHITECTURE ========== -->
+  <div class="panel" id="arch">
+    <div class="eyebrow">System Architecture</div>
+    <h1 class="page-title">Full Stack — Software + IoT</h1>
+    <p class="page-lead">Software-first MVP, hardware added in Phase 3. MQTT + ESP32 only after dock hardware arrives.</p>
+
+    <div class="section-title">Software Layer</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <div>
+          <div class="tag sky" style="margin-bottom:8px">Mobile · Flutter</div>
+          <ul class="plain" style="font-size:12px">
+            <li>Firebase Auth + OTP login</li>
+            <li>Dynamic QR generation</li>
+            <li>Ride tracking + maps (Leaflet)</li>
+            <li>Wallet + transaction history</li>
+            <li>Push notifications (FCM)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="tag lime" style="margin-bottom:8px">Backend · FastAPI</div>
+          <ul class="plain" style="font-size:12px">
+            <li>Auth Service — OTP, JWT, sessions</li>
+            <li>Ride Service — tokens, lifecycle, fare</li>
+            <li>Wallet Service — ledger, Razorpay</li>
+            <li>Dock Service — availability, unlock</li>
+            <li>Vehicle Service — assignment, health</li>
+          </ul>
+        </div>
+        <div>
+          <div class="tag violet" style="margin-bottom:8px">Data + Ops</div>
+          <ul class="plain" style="font-size:12px">
+            <li>PostgreSQL + PostGIS (rides, geo)</li>
+            <li>Redis (sessions, OTP, tokens)</li>
+            <li>MinIO (S3-compatible storage)</li>
+            <li>Grafana + Prometheus + Loki</li>
+            <li>n8n (webhook automation)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">IoT Layer — Add When Hardware Arrives</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="tag amber" style="margin-bottom:10px">Scooter Controller — ESP32 / ESP32-C3</div>
+        <ul class="plain">
+          <li>BLE proximity tether to rider's phone</li>
+          <li>Ride auth watchdog — disables after disconnect</li>
+          <li>Battery + lock state telemetry</li>
+          <li>Motor enable/kill via relay (not direct)</li>
+          <li>Cloud push via MQTT or Wi-Fi</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag rose" style="margin-bottom:10px">Dock Controller — ESP32-C3</div>
+        <ul class="plain">
+          <li>QR code scanner → validate ride token → session unlock</li>
+          <li>Solenoid / lock actuator control</li>
+          <li>Presence detection via limit/reed switch</li>
+          <li>Temperature sensing near charge contacts</li>
+          <li>OLED status + backend event sync</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section-title">Layered Control — Safety First</div>
+    <div class="card">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="flow-node rose" style="display:block;text-align:center;padding:12px">Hardwired power path — fuse → relay/contactor → emergency disable line</div>
+        <div style="text-align:center;color:var(--muted2);font-family:'JetBrains Mono',monospace">↓</div>
+        <div class="flow-node amber" style="display:block;text-align:center;padding:12px">ESP32 local state machine — docked / authorized / riding / charging / fault</div>
+        <div style="text-align:center;color:var(--muted2);font-family:'JetBrains Mono',monospace">↓</div>
+        <div class="flow-node sky" style="display:block;text-align:center;padding:12px">Cloud supervisor — logs, user validation, ride records, remote policy</div>
+        <div style="text-align:center;color:var(--muted2);font-family:'JetBrains Mono',monospace">↓</div>
+        <div class="flow-node" style="display:block;text-align:center;padding:12px;color:var(--muted)">Mechanical fail-safe — physical lock, limit-switch confirmation, charging interlock</div>
+      </div>
+      <div class="callout rose" style="margin-top:14px;margin-bottom:0">
+        <div class="callout-icon">⚠️</div>
+        <div>No single layer should be the only thing standing between the system and a runaway scooter. This is what turns a gadget into a system.</div>
+      </div>
+    </div>
+
+    <div class="section-title">Ride State Machine — Complete</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <div class="tag sky" style="margin-bottom:8px">Happy Path</div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-family:'JetBrains Mono',monospace;font-size:11px">
+            <div class="flow-node sky" style="text-align:left">REQUESTED — QR scanned</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node sky" style="text-align:left">ASSIGNED — scooter allocated</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node accent" style="text-align:left">UNLOCKED — dock released</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node accent" style="text-align:left">ACTIVE — rider moving</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node" style="text-align:left;color:var(--muted)">ENDING — return detected</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node" style="text-align:left;color:var(--muted)">PAYMENT_PENDING — fare calc</div>
+            <div style="color:var(--muted2);padding-left:10px">↓</div>
+            <div class="flow-node violet" style="text-align:left">COMPLETED — wallet debited</div>
+          </div>
+        </div>
+        <div>
+          <div class="tag rose" style="margin-bottom:8px">Error / Edge States</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div class="flow-node rose" style="text-align:left;display:block">CANCELLED — user cancelled before unlock</div>
+            <div class="flow-node rose" style="text-align:left;display:block">FAILED — payment deduction failed</div>
+            <div class="flow-node rose" style="text-align:left;display:block">FORCE_TERMINATED — admin or timeout override</div>
+            <div class="flow-node rose" style="text-align:left;display:block">EMERGENCY_STOP — hardware fault / safety trigger</div>
+            <div class="flow-node amber" style="text-align:left;display:block">OFFLINE_RECOVERY — connectivity lost mid-ride, sync on reconnect</div>
+          </div>
+        </div>
+      </div>
+      <div class="callout lime" style="margin-bottom:0">
+        <div class="callout-icon">→</div>
+        <div>The <code style="font-family:'JetBrains Mono',monospace;font-size:12px">status</code> column in the rides table is the source of truth for billing, dock availability, and fleet state. PAYMENT_PENDING prevents double-deduction. OFFLINE_RECOVERY is critical for campus/basement dead zones.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TEAM SPLIT ========== -->
+  <div class="panel" id="split">
+    <div class="eyebrow">Team of Two</div>
+    <h1 class="page-title">Full-Stack Split — Both Sides, Both People</h1>
+    <p class="page-lead">Neither person is "the frontend dev" or "the backend dev." Each track owns a vertical slice — its backend service and matching Flutter/Next.js screens. Equal work, equal learning, equal ownership.</p>
+
+    <div class="tracks">
+      <div class="track a">
+        <div class="track-tag">● Track A</div>
+        <div class="track-title">Auth · Ride · Vehicle · Notifications</div>
+        <ul class="track-list">
+          <li><strong>Auth Service</strong> (FastAPI) + login/OTP screens (Flutter)</li>
+          <li><strong>Ride Service</strong> + ride-token/QR generation + QR display & ride tracking UI</li>
+          <li><strong>Vehicle Service</strong> — assignment, battery, health APIs</li>
+          <li><strong>Push notifications</strong> — FCM backend trigger + Flutter UI</li>
+          <li><strong>Marketing website</strong> — Next.js + TailwindCSS on Vercel</li>
+        </ul>
+      </div>
+      <div class="track b">
+        <div class="track-tag">● Track B</div>
+        <div class="track-title">Wallet · Dock · Dashboard · Infra</div>
+        <ul class="track-list">
+          <li><strong>Wallet Service</strong> + Razorpay integration + wallet/recharge/history UI</li>
+          <li><strong>Dock Service</strong> — availability, capacity, unlock flow + maps/dock UI</li>
+          <li><strong>Database schema</strong> & migrations — PostgreSQL + PostGIS, all tables</li>
+          <li><strong>Admin Dashboard</strong> — fleet monitoring & reporting (Next.js + FastAPI)</li>
+          <li><strong>Infrastructure</strong> — Docker, Coolify, GitHub Actions, Oracle/Hetzner setup</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="bridge">
+      <span class="l">Track A</span>
+      <span class="bridge-divider">⟺ shared: code review · integration tests · weekly sync ⟺</span>
+      <span class="r">Track B</span>
+    </div>
+
+    <div class="section-title" style="margin-top:24px">Phase-by-Phase Ownership</div>
+    <div class="phase-grid">
+      <div class="phase-cell head">Phase</div>
+      <div class="phase-cell head" style="color:var(--lime)">● Track A — Backend + Flutter</div>
+      <div class="phase-cell head" style="color:var(--sky)">● Track B — Backend + Flutter</div>
+
+      <div class="phase-cell" style="background:var(--s2)">
+        <div class="phase-label">Phase 1</div>
+        <div class="phase-sub">Foundation</div>
+      </div>
+      <div class="phase-cell">
+        <strong>Auth Service</strong> — OTP login, JWT, token refresh<br>
+        <span class="muted">Flutter:</span> Login screen, onboarding, profile
+      </div>
+      <div class="phase-cell">
+        <strong>Wallet Service</strong> — ledger model, DB schema, all tables<br>
+        <span class="muted">Flutter:</span> Wallet screen, balance display
+      </div>
+
+      <div class="phase-cell" style="background:var(--s2)">
+        <div class="phase-label">Phase 2</div>
+        <div class="phase-sub">QR & Tokens</div>
+      </div>
+      <div class="phase-cell">
+        <strong>Ride-token generation</strong> — 30s dynamic QR, HMAC signing<br>
+        <span class="muted">Flutter:</span> QR display screen, countdown timer
+      </div>
+      <div class="phase-cell">
+        <strong>Token validation APIs</strong> — dock-side verify endpoint<br>
+        <span class="muted">Flutter:</span> Maps screen, dock availability markers (Leaflet)
+      </div>
+
+      <div class="phase-cell" style="background:var(--s2)">
+        <div class="phase-label">Phase 3</div>
+        <div class="phase-sub">Dock & Vehicle</div>
+      </div>
+      <div class="phase-cell">
+        <strong>Vehicle Service</strong> — assignment logic, battery + health<br>
+        <span class="muted">Flutter:</span> Ride tracking UI, active ride card
+      </div>
+      <div class="phase-cell">
+        <strong>Dock Service</strong> — capacity, unlock flow, dock events<br>
+        <span class="muted">Next.js:</span> Admin dock-monitoring page
+      </div>
+
+      <div class="phase-cell" style="background:var(--s2)">
+        <div class="phase-label">Phase 4</div>
+        <div class="phase-sub">Billing & Rides</div>
+      </div>
+      <div class="phase-cell">
+        <strong>Ride lifecycle</strong> — start/end, fare calculation, ride state<br>
+        <span class="muted">Flutter:</span> Ride receipt, fare breakdown
+      </div>
+      <div class="phase-cell">
+        <strong>Razorpay</strong> — payment webhooks, wallet debits, refunds<br>
+        <span class="muted">Flutter:</span> Recharge flow, transaction history
+      </div>
+
+      <div class="phase-cell" style="background:var(--s2)">
+        <div class="phase-label">Phase 5</div>
+        <div class="phase-sub">Ops & Launch</div>
+      </div>
+      <div class="phase-cell">
+        <strong>FCM notifications</strong> — ride start/end, wallet alerts<br>
+        <span class="muted">Next.js:</span> Marketing website on Vercel
+      </div>
+      <div class="phase-cell">
+        <strong>Admin dashboard</strong> — fleet, revenue, users, reporting<br>
+        <span class="muted">DevOps:</span> Docker, Coolify, CI/CD, Oracle/Hetzner
+      </div>
+    </div>
+
+    <div class="callout amber" style="margin-top:16px">
+      <div class="callout-icon">🔁</div>
+      <div><strong>Shared every phase:</strong> Code review on every PR. Integration testing when both sides of a phase land. A short weekly sync to re-align before the next phase starts. No one ships to main without a second pair of eyes.</div>
+    </div>
+
+    <div class="section-title">What to Build First — This Week</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="tag lime" style="margin-bottom:10px">Track A starts with</div>
+        <ul class="plain">
+          <li>Firebase Auth project setup</li>
+          <li>FastAPI boilerplate + JWT middleware</li>
+          <li>OTP login endpoint</li>
+          <li>Flutter: login + OTP screen skeleton</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Track B starts with</div>
+        <ul class="plain">
+          <li>PostgreSQL schema — all core tables</li>
+          <li>Wallet ledger model + balance endpoint</li>
+          <li>Oracle VPS + Docker + Nginx setup</li>
+          <li>Flutter: wallet screen skeleton</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout violet">
+      <div class="callout-icon">🚀</div>
+      <div>Skip MQTT, Mosquitto, MinIO, Grafana, n8n, and all IoT layers for the first two phases. The actual business logic risk is in Auth + Wallet + QR Security + Ride Lifecycle + Payments. Hardware comes after the software works end-to-end.</div>
+    </div>
+  </div>
+
+
+  <!-- ========== CYBERSECURITY ========== -->
+  <div class="panel" id="security">
+    <div class="eyebrow">Cybersecurity Architecture</div>
+    <h1 class="page-title">Security — Mobile · API · Backend</h1>
+    <p class="page-lead">Three attack surfaces, each defended independently. Compromise at one layer should not cascade to another.</p>
+
+    <div class="section-title">Mobile Security</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="tag rose" style="margin-bottom:10px">Storage & Runtime</div>
+        <ul class="plain">
+          <li><strong>Flutter Secure Storage</strong> — JWT tokens stored in Keychain (iOS) / Keystore (Android), never in SharedPreferences</li>
+          <li><strong>Root / Jailbreak Detection</strong> — refuse to operate on compromised devices; use flutter_jailbreak_detection</li>
+          <li><strong>App Integrity</strong> — Play Integrity API (Android) + DeviceCheck (iOS) to confirm genuine app binary</li>
+          <li><strong>Memory Scrubbing</strong> — ride tokens cleared from memory immediately after use</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag rose" style="margin-bottom:10px">Transport & Binding</div>
+        <ul class="plain">
+          <li><strong>SSL/TLS Certificate Pinning</strong> — app rejects connections to backend unless cert matches pinned hash; prevents MITM</li>
+          <li><strong>Device Binding</strong> — ride tokens include device fingerprint; cannot be used from a different device even if stolen</li>
+          <li><strong>Obfuscation</strong> — flutter build --obfuscate --split-debug-info for release builds</li>
+          <li><strong>Secure deep links</strong> — verified App Links / Universal Links only, no custom scheme</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section-title">API Security</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="tag violet" style="margin-bottom:10px">Authentication Chain</div>
+        <ul class="plain">
+          <li><strong>Firebase Token</strong> → FastAPI verifies with Firebase Admin SDK on every request</li>
+          <li><strong>JWT Access Token</strong> — 15 min expiry, signed with RS256 (asymmetric), stored in secure storage only</li>
+          <li><strong>Refresh Token</strong> — 30 day expiry, single-use, rotated on each refresh (rotation prevents replay)</li>
+          <li><strong>Ride Token</strong> — 30 sec expiry, HMAC-SHA256 signed, one-time flag in Redis; dock validates and immediately marks used</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag violet" style="margin-bottom:10px">Request Defence</div>
+        <ul class="plain">
+          <li><strong>Rate Limiting</strong> — per-IP and per-user via Redis; login: 5 req/min, QR gen: 3 req/min, payment: 10 req/min</li>
+          <li><strong>Replay Protection</strong> — each ride token has a jti (JWT ID) stored in Redis; duplicate jti = instant reject</li>
+          <li><strong>QR Anti-Reuse</strong> — token marked used in Redis atomically with SETNX; race condition safe</li>
+          <li><strong>Input Validation</strong> — Pydantic schemas on all FastAPI endpoints; no raw SQL, always ORM/parameterised</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section-title">Backend & Infrastructure Security</div>
+    <div class="grid3">
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Secret Management</div>
+        <ul class="plain" style="font-size:12px">
+          <li>No secrets in code or git — use .env + Docker secrets</li>
+          <li>Rotate Firebase service account keys quarterly</li>
+          <li>Razorpay webhook secret validated on every callback</li>
+          <li>DB password in environment variable only</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Database Security</div>
+        <ul class="plain" style="font-size:12px">
+          <li>PostgreSQL encryption at rest (OS-level or pgcrypto)</li>
+          <li>Separate DB user per service (principle of least privilege)</li>
+          <li>Audit log table — every wallet debit, ride event, admin action</li>
+          <li>Daily automated pg_dump → MinIO with retention policy</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="tag sky" style="margin-bottom:10px">Infrastructure</div>
+        <ul class="plain" style="font-size:12px">
+          <li>Cloudflare WAF + DDoS protection in front of all traffic</li>
+          <li>TLS 1.3 enforced everywhere; no HTTP allowed</li>
+          <li>Let's Encrypt cert auto-renewed via Coolify</li>
+          <li>SSH key-only access to VPS; password auth disabled</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout rose">
+      <div class="callout-icon">🔐</div>
+      <div>The most critical security item is <strong>QR anti-reuse</strong>. If a used ride token can be replayed, anyone can unlock scooters for free. The Redis SETNX (set-if-not-exists) atomic operation is the correct fix — not just checking a flag. Implement this before the first demo.</div>
+    </div>
+  </div>
+
+  <!-- ========== DATABASE ========== -->
+  <div class="panel" id="database">
+    <div class="eyebrow">Database Architecture</div>
+    <h1 class="page-title">PostgreSQL Schema — Core Tables</h1>
+    <p class="page-lead">Ledger-based wallet, event-sourced rides, PostGIS for dock geometry. Every financial operation is append-only — no balance column, only transaction sum.</p>
+
+    <div class="section-title">Core Table Overview</div>
+    <div class="card">
+      <table class="dtable">
+        <tr>
+          <th>Table</th>
+          <th>Key Columns</th>
+          <th>Purpose</th>
+        </tr>
+        <tr>
+          <td><strong>users</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, firebase_uid, phone, name, status, created_at</td>
+          <td class="muted">Identity record; firebase_uid is the link to Firebase Auth</td>
+        </tr>
+        <tr>
+          <td><strong>wallets</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, user_id, currency, created_at</td>
+          <td class="muted">One wallet per user; balance is never stored — computed from transactions</td>
+        </tr>
+        <tr>
+          <td><strong>wallet_transactions</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, wallet_id, type, amount, reference_id, created_at</td>
+          <td class="muted">Append-only ledger: CREDIT (recharge), DEBIT (ride), REFUND; balance = SUM(debits) - SUM(credits)</td>
+        </tr>
+        <tr>
+          <td><strong>rides</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, user_id, vehicle_id, dock_start_id, dock_end_id, status, fare, start_at, end_at</td>
+          <td class="muted">Core ride record; status is the state machine field</td>
+        </tr>
+        <tr>
+          <td><strong>ride_events</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, ride_id, event_type, payload, created_at</td>
+          <td class="muted">Full audit trail: QR_SCANNED, DOCK_UNLOCKED, RIDE_STARTED, RETURNED, FARE_CALCULATED, etc.</td>
+        </tr>
+        <tr>
+          <td><strong>vehicles</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, qr_code, status, battery_pct, dock_id, last_seen_at</td>
+          <td class="muted">Fleet record; status: AVAILABLE / IN_RIDE / CHARGING / MAINTENANCE / OFFLINE</td>
+        </tr>
+        <tr>
+          <td><strong>docks</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, name, location (GEOMETRY), total_slots, status</td>
+          <td class="muted">PostGIS geometry for map queries; status: ACTIVE / OFFLINE / MAINTENANCE</td>
+        </tr>
+        <tr>
+          <td><strong>dock_slots</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, dock_id, slot_number, vehicle_id, is_occupied, is_charging</td>
+          <td class="muted">Physical slot state; vehicle_id null means empty slot</td>
+        </tr>
+        <tr>
+          <td><strong>vehicle_status</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, vehicle_id, battery_pct, temperature, lock_state, reported_at</td>
+          <td class="muted">Time-series IoT telemetry — one row per MQTT status push</td>
+        </tr>
+        <tr>
+          <td><strong>notifications</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, user_id, type, title, body, sent_at, read_at</td>
+          <td class="muted">FCM delivery log; type: RIDE_START, RIDE_END, LOW_BALANCE, PROMO</td>
+        </tr>
+        <tr>
+          <td><strong>audit_logs</strong></td>
+          <td class="mono" style="font-size:11px;color:var(--muted)">id, actor_id, action, entity_type, entity_id, payload, created_at</td>
+          <td class="muted">Immutable admin action log; every fleet or user change recorded</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section-title">Wallet Ledger — How Balance Works</div>
+    <div class="card">
+      <div class="grid2">
+        <div>
+          <div class="tag lime" style="margin-bottom:10px">Example Transaction History</div>
+          <table class="dtable" style="font-size:12px">
+            <tr><th>Type</th><th>Amount</th><th>Running Total</th></tr>
+            <tr><td>CREDIT</td><td style="color:var(--lime)">+₹500</td><td>₹500</td></tr>
+            <tr><td>DEBIT</td><td style="color:var(--rose)">-₹30</td><td>₹470</td></tr>
+            <tr><td>DEBIT</td><td style="color:var(--rose)">-₹20</td><td>₹450</td></tr>
+            <tr><td>REFUND</td><td style="color:var(--lime)">+₹100</td><td>₹550</td></tr>
+            <tr><td>DEBIT</td><td style="color:var(--rose)">-₹45</td><td>₹505</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="tag sky" style="margin-bottom:10px">Why Ledger Model?</div>
+          <ul class="plain">
+            <li><strong>Auditability</strong> — every rupee movement has a record; disputes resolved with evidence</li>
+            <li><strong>Fraud prevention</strong> — no balance column to tamper with; balance is computed, not stored</li>
+            <li><strong>Refund integrity</strong> — refunds are credits, not updates; original debit still exists</li>
+            <li><strong>Concurrency safe</strong> — balance check + debit in one DB transaction with row lock</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout sky">
+      <div class="callout-icon">💡</div>
+      <div>Add a PostgreSQL <strong>CHECK constraint</strong> on wallet_transactions to ensure amount > 0 always. The sign (debit vs credit) lives in the <code style="font-family:'JetBrains Mono',monospace;font-size:12px">type</code> enum, not the amount value. This prevents a class of bugs where a debit accidentally becomes a credit.</div>
+    </div>
+  </div>
+
+  <!-- ========== QR SECURITY ========== -->
+  <div class="panel" id="qrsecurity">
+    <div class="eyebrow">QR Security Architecture</div>
+    <h1 class="page-title">Dynamic QR — 30s Expiry · JWT · One-Time Use</h1>
+    <p class="page-lead">The QR is the most security-critical part of the entire product. A static QR or a reusable token lets anyone unlock scooters indefinitely. Here's the correct architecture.</p>
+
+    <div class="section-title">QR Authentication Flow — Full</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div class="tag lime" style="margin-bottom:10px">Generation (User Side)</div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-family:'JetBrains Mono',monospace;font-size:11px">
+            <div class="flow-node sky" style="display:block;text-align:left">User authenticated (Firebase token valid)</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node sky" style="display:block;text-align:left">User taps "Unlock" → POST /rides/token</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node accent" style="display:block;text-align:left">Backend generates ride token:
+  { user_id, iat, exp: now+30s, jti: uuid4 }</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node accent" style="display:block;text-align:left">Token signed with HMAC-SHA256</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node accent" style="display:block;text-align:left">jti stored in Redis with 30s TTL</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node" style="display:block;text-align:left;color:var(--muted)">Flutter encodes token → QR displayed</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node" style="display:block;text-align:left;color:var(--muted)">Countdown timer shown (30 → 0s)</div>
+          </div>
+        </div>
+        <div>
+          <div class="tag rose" style="margin-bottom:10px">Validation (Dock Side)</div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-family:'JetBrains Mono',monospace;font-size:11px">
+            <div class="flow-node rose" style="display:block;text-align:left">ESP32 scanner reads QR code</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node rose" style="display:block;text-align:left">POST /docks/{id}/validate { token }</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node rose" style="display:block;text-align:left">Backend: verify HMAC signature</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node rose" style="display:block;text-align:left">Check exp — reject if expired</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node rose" style="display:block;text-align:left">SETNX jti:used in Redis → reject if exists</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node violet" style="display:block;text-align:left">Check wallet balance ≥ minimum</div>
+            <div style="color:var(--muted2);padding-left:8px">↓</div>
+            <div class="flow-node accent" style="display:block;text-align:left">200 OK → dock releases scooter</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Security Properties</div>
+    <div class="grid3">
+      <div class="card">
+        <div class="tag lime" style="margin-bottom:8px">30s Expiry</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6">Token expires in 30 seconds. A screenshot, screen recording, or stolen QR image is useless after 30s. The countdown timer on the Flutter screen communicates urgency to the user — regenerate before it hits 0.</div>
+      </div>
+      <div class="card">
+        <div class="tag rose" style="margin-bottom:8px">One-Time Use (jti)</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6">Each token has a unique <code style="font-family:'JetBrains Mono',monospace;font-size:11px">jti</code> (JWT ID). Redis SETNX marks it as used atomically on first scan. Any second scan of the same QR — even within 30s — is rejected. Prevents replay attacks.</div>
+      </div>
+      <div class="card">
+        <div class="tag violet" style="margin-bottom:8px">HMAC Signature</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.6">Token is signed server-side. The dock (ESP32) cannot verify the token locally — it forwards to the backend API. Forged tokens fail HMAC verification. The signing secret never leaves the server.</div>
+      </div>
+    </div>
+
+    <div class="section-title">QR Generation — What's in the Token</div>
+    <div class="card">
+      <div style="background:var(--bg);border-radius:8px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;color:var(--muted)">
+        <span style="color:var(--muted2)">// JWT Payload (ride token)</span><br>
+        {<br>
+        &nbsp;&nbsp;<span style="color:var(--lime)">"sub"</span>: <span style="color:var(--sky)">"user_abc123"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted2)">// user_id</span><br>
+        &nbsp;&nbsp;<span style="color:var(--lime)">"jti"</span>: <span style="color:var(--sky)">"uuid4-unique-per-qr"</span>,&nbsp;<span style="color:var(--muted2)">// one-time ID in Redis</span><br>
+        &nbsp;&nbsp;<span style="color:var(--lime)">"iat"</span>: <span style="color:var(--amber)">1719200000</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted2)">// issued at</span><br>
+        &nbsp;&nbsp;<span style="color:var(--lime)">"exp"</span>: <span style="color:var(--amber)">1719200030</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted2)">// issued at + 30s</span><br>
+        &nbsp;&nbsp;<span style="color:var(--lime)">"did"</span>: <span style="color:var(--sky)">"device_fingerprint"</span>&nbsp;&nbsp;&nbsp;<span style="color:var(--muted2)">// device binding</span><br>
+        }<br>
+        <span style="color:var(--muted2)">// Signed: HMAC-SHA256(payload, SERVER_SECRET)</span>
+      </div>
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-icon">⚡</div>
+      <div><strong>For the MVP demo</strong>: the QR scanner on the dock is a dedicated 2D barcode reader module (e.g. GM65 or ZBar-compatible camera) connected to ESP32 via UART. The ESP32 simply reads the string and fires the POST request. It doesn't need to understand or verify the token — that's the backend's job.</div>
+    </div>
+  </div>
+
+  <!-- ========== HARDWARE BOM & COST ========== -->
+  <div class="panel" id="bom">
+    <div class="eyebrow">Hardware & Cost</div>
+    <h1 class="page-title">BOM · Budget · Scaling Path</h1>
+    <p class="page-lead">One scooter, two docks. Prove the thesis before scaling. Every component chosen for availability on Indian marketplaces (Robu, RoboElements, Amazon.in).</p>
+
+    <div class="section-title">Hardware BOM — Dock Controller</div>
+    <div class="card">
+      <table class="dtable">
+        <tr>
+          <th>Component</th>
+          <th>Part / Variant</th>
+          <th>Purpose</th>
+          <th>Approx Cost</th>
+        </tr>
+        <tr>
+          <td><strong>Microcontroller</strong></td>
+          <td class="mono" style="font-size:11px">ESP32-C3 DevKit</td>
+          <td class="muted">Main dock brain — Wi-Fi, QR read, lock control, backend sync</td>
+          <td><span class="tag lime">₹300–450</span></td>
+        </tr>
+        <tr>
+          <td><strong>QR Scanner Module</strong></td>
+          <td class="mono" style="font-size:11px">GM65 / DE2120 UART</td>
+          <td class="muted">Reads user's phone QR code; sends string to ESP32 via UART</td>
+          <td><span class="tag lime">₹800–1,200</span></td>
+        </tr>
+        <tr>
+          <td><strong>Solenoid Lock</strong></td>
+          <td class="mono" style="font-size:11px">12V Electromagnetic lock</td>
+          <td class="muted">Physically holds scooter in dock; releases on valid QR</td>
+          <td><span class="tag amber">₹400–700</span></td>
+        </tr>
+        <tr>
+          <td><strong>Relay Module</strong></td>
+          <td class="mono" style="font-size:11px">5V single-channel relay</td>
+          <td class="muted">ESP32 GPIO → relay → solenoid; protects ESP32 from 12V load</td>
+          <td><span class="tag lime">₹80–150</span></td>
+        </tr>
+        <tr>
+          <td><strong>Presence Sensor</strong></td>
+          <td class="mono" style="font-size:11px">Reed switch / limit switch</td>
+          <td class="muted">Detects scooter physically docked; triggers charging start</td>
+          <td><span class="tag lime">₹50–100</span></td>
+        </tr>
+        <tr>
+          <td><strong>Temperature Sensor</strong></td>
+          <td class="mono" style="font-size:11px">DS18B20 or NTC 10K</td>
+          <td class="muted">Monitors charging contact temp; cuts power on overheat</td>
+          <td><span class="tag lime">₹60–120</span></td>
+        </tr>
+        <tr>
+          <td><strong>Status Display</strong></td>
+          <td class="mono" style="font-size:11px">0.96" OLED I2C or LED ring</td>
+          <td class="muted">Shows dock state: READY / OCCUPIED / FAULT / UNLOCKING</td>
+          <td><span class="tag lime">₹150–300</span></td>
+        </tr>
+        <tr>
+          <td><strong>Power Supply</strong></td>
+          <td class="mono" style="font-size:11px">12V 2A adapter + buck 5V</td>
+          <td class="muted">Powers solenoid (12V) and ESP32+peripherals (5V via buck)</td>
+          <td><span class="tag amber">₹300–500</span></td>
+        </tr>
+        <tr>
+          <td><strong>Enclosure</strong></td>
+          <td class="mono" style="font-size:11px">IP54 ABS project box</td>
+          <td class="muted">Weather protection for outdoor dock electronics</td>
+          <td><span class="tag amber">₹400–800</span></td>
+        </tr>
+        <tr>
+          <td colspan="3" style="font-weight:600;text-align:right">Per Dock Electronics Total</td>
+          <td><span class="tag amber">₹2,500–4,300</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section-title">Hardware BOM — Scooter Controller</div>
+    <div class="card">
+      <table class="dtable">
+        <tr>
+          <th>Component</th>
+          <th>Part / Variant</th>
+          <th>Purpose</th>
+          <th>Approx Cost</th>
+        </tr>
+        <tr>
+          <td><strong>Microcontroller</strong></td>
+          <td class="mono" style="font-size:11px">ESP32 DevKit V1</td>
+          <td class="muted">Scooter brain — BLE tether, lock relay, telemetry, Wi-Fi sync</td>
+          <td><span class="tag lime">₹400–600</span></td>
+        </tr>
+        <tr>
+          <td><strong>Motor Relay</strong></td>
+          <td class="mono" style="font-size:11px">30A automotive relay</td>
+          <td class="muted">Interrupts motor controller enable line on unauthorised disconnect</td>
+          <td><span class="tag lime">₹150–250</span></td>
+        </tr>
+        <tr>
+          <td><strong>Battery Monitor</strong></td>
+          <td class="mono" style="font-size:11px">INA219 or voltage divider</td>
+          <td class="muted">Reports battery % to backend via MQTT or REST</td>
+          <td><span class="tag lime">₹80–200</span></td>
+        </tr>
+        <tr>
+          <td><strong>Power Supply</strong></td>
+          <td class="mono" style="font-size:11px">Buck converter 48V→5V</td>
+          <td class="muted">Powers ESP32 from scooter battery pack (36–60V typical)</td>
+          <td><span class="tag amber">₹250–500</span></td>
+        </tr>
+        <tr>
+          <td><strong>Enclosure</strong></td>
+          <td class="mono" style="font-size:11px">IP65 ABS box under deck</td>
+          <td class="muted">Waterproof, vibration-resistant mounting under scooter</td>
+          <td><span class="tag amber">₹300–600</span></td>
+        </tr>
+        <tr>
+          <td colspan="3" style="font-weight:600;text-align:right">Per Scooter Electronics Total</td>
+          <td><span class="tag lime">₹1,200–2,150</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section-title">MVP Budget — Full Picture</div>
+    <div class="cost-stages">
+      <div class="cost-stage free">
+        <div class="cost-stage-lbl">Hardware (1 scooter + 2 docks)</div>
+        <div class="cost-amount">₹6,200–10,750</div>
+        <div class="cost-items">1 × scooter controller<br>2 × dock controllers<br>Dock structure + mechanics<br>(excludes scooter purchase)</div>
+      </div>
+      <div class="cost-stage mid">
+        <div class="cost-stage-lbl">Software Infra / month</div>
+        <div class="cost-amount">₹0–500</div>
+        <div class="cost-items">Oracle Free Tier hosting<br>Firebase free tier<br>SMS OTP charges<br>Domain ~₹1,000/yr</div>
+      </div>
+      <div class="cost-stage full">
+        <div class="cost-stage-lbl">Pilot (10 scooters, 5 docks)</div>
+        <div class="cost-amount">₹4,000–6,000/mo</div>
+        <div class="cost-items">Hetzner VPS ~₹2,000<br>SIM cards (10 × ₹200)<br>Razorpay 2% per txn<br>SMS OTP at scale</div>
+      </div>
+    </div>
+
+    <div class="section-title">Scaling Path — Hardware & Software</div>
+    <div class="mig-row">
+      <div class="mig-stage s1">
+        <div class="mig-stage-lbl">MVP</div>
+        <div class="mig-stage-title">1 Scooter · 2 Docks</div>
+        <div class="mig-items">
+          Dev boards (no PCB)<br>
+          Wi-Fi only (no SIM)<br>
+          Docker Compose<br>
+          Oracle Free Tier<br>
+          ~₹10,000 hardware
+        </div>
+      </div>
+      <div class="mig-arrow-box">→</div>
+      <div class="mig-stage s2">
+        <div class="mig-stage-lbl">Pilot</div>
+        <div class="mig-stage-title">10 Scooters · 5 Docks</div>
+        <div class="mig-items">
+          Dev boards still fine<br>
+          Add SIM (Airtel IoT)<br>
+          Hetzner VPS<br>
+          Add Mosquitto MQTT<br>
+          ~₹50,000 hardware
+        </div>
+      </div>
+      <div class="mig-arrow-box">→</div>
+      <div class="mig-stage s3">
+        <div class="mig-stage-lbl">Production</div>
+        <div class="mig-stage-title">50+ Scooters · 25+ Docks</div>
+        <div class="mig-items">
+          Custom PCB design<br>
+          Managed SIM (eSIM)<br>
+          AWS / K3s cluster<br>
+          EMQX Cloud<br>
+          ~₹5L+ hardware
+        </div>
+      </div>
+    </div>
+
+    <div class="callout amber">
+      <div class="callout-icon">💰</div>
+      <div><strong>Skip GPS on the scooter for MVP.</strong> The phone supplies location. GPS modules add ₹400–800 per scooter, require antenna routing, and drain battery. Add GPS only when you need fleet-level location without a rider attached — that's a pilot/expansion concern, not MVP.</div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelector('.main').scrollTo(0, 0);
+}
+</script>
+</body>
+</html>

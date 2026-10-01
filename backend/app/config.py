@@ -68,7 +68,11 @@ cF1Pl8Kp8ICTvZ1+SCWS3EzXepfmw3lwgLJIqnqWEdsJ2Tunv5aArbhBQ+Bv+Y41
     # Ride Token (QR)
     RIDE_TOKEN_SECRET: str = "dev_ride_secret_change_before_deploy"
     RIDE_TOKEN_ALGORITHM: str = "HS256"
-    RIDE_TOKEN_TTL_SECONDS: int = 30
+    # 60 s accounts for ESP32 WiFi reconnect (5–15 s) + OV2640 dummy-frame
+    # flush (~0.5 s) + HTTP round-trip (~2 s).  The JWT exp + Redis SETNX
+    # already prevent replay regardless of TTL, so the longer window does
+    # not weaken security.  Override via RIDE_TOKEN_TTL_SECONDS env var.
+    RIDE_TOKEN_TTL_SECONDS: int = 60
     VEHICLE_BATTERY_MIN_THRESHOLD: int = 20
 
     # CORS — comma-separated origin list. "*" only ever makes sense in dev;

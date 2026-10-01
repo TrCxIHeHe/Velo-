@@ -188,12 +188,13 @@ swap, because they only depend on the function's *return type*
 
 ## 6. Testing it yourself — copy-paste curl commands
 
-Use any UUID you like as your test user; it doesn't need to exist in the
-`users` table for the wallet/dock demo to work (SQLAlchemy only enforces the
-foreign key when you try to join against it, which these endpoints don't).
+Use the seeded debug user and dock IDs below. The user must exist in the
+`users` table on real PostgreSQL, and the dock flow now depends on a real
+available vehicle in the seeded dock slot.
 
 ```powershell
 $UID = "11111111-1111-1111-1111-111111111111"
+$DOCK_ID = "33333333-3333-3333-3333-333333333333"
 
 # Get (auto-creates) your wallet — balance starts at 0
 curl.exe http://127.0.0.1:8000/api/v1/wallet -H "X-Debug-User-Id: $UID"
@@ -223,7 +224,7 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/docks `
 curl.exe http://127.0.0.1:8000/api/v1/docks
 
 # Get one dock with its slots + availability (use the id from the create response)
-curl.exe http://127.0.0.1:8000/api/v1/docks/<dock_id>
+curl.exe http://127.0.0.1:8000/api/v1/docks/$DOCK_ID
 ```
 
 If every response has `"success": true`, you're fully working end to end.
