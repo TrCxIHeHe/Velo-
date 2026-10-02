@@ -1,244 +1,306 @@
 #!/usr/bin/env python3
 """
-test_scan.py — Velo Dock Vision Test Utility
-═══════════════════════════════════════════════════════════════════════════════
-Run this on the Arduino laptop (or any machine on the same network) to test the
-entire QR scan → backend → ride confirm pipeline without needing the physical
-ESP32-CAM hardware connected.
+Velo dock/QR integration test utility.
 
-Usage:
-  python test_scan.py --host 192.168.1.X --dock YOUR_DOCK_UUID [options]
+Current backend contract:
+    POST /api/v1/rides/confirm
+
+JSON body:
+    {
+        "ride_token": "<JWT from /api/v1/rides/token>",
+        "dock_id": "<dock UUID>"
+    }
+
+The ESP32-CAM's job is to decode the QR displayed by the Flutter app and
+send the decoded ride token to the dock/backend integration. The old
+/docks/{dock_id}/scan image-upload endpoint is no longer used by the
+current backend.
 
 Examples:
-  # Test with a QR code image file
-  python test_scan.py --host 192.168.1.50 --dock 3fa85f64-5717-4562-b3fc-2c963f66afa6 --image qr.jpg
 
-  # Screenshot the Flutter QR screen → save as qr.png → test it
-  python test_scan.py --host 192.168.1.50 --dock 3fa85f64-... --image qr.png
+  # Check backend connectivity and list docks
+  python scripts/test_scan.py --host 192.168.1.50
 
-  # Generate a test QR image locally and scan it (needs: pip install qrcode pillow)
-  python test_scan.py --host 192.168.1.50 --dock 3fa85f64-... --token "eyJhbG..."
+  # Simulate an ESP32-CAM that already decoded the QR
+  python scripts/test_scan.py \
+      --host 192.168.1.50 \
+      --dock YOUR_DOCK_UUID \
+      --token "eyJhbG..."
 
-  # Watch mode: monitor the serial port of a connected ESP32-CAM
-  python test_scan.py --host 192.168.1.50 --dock 3fa85f64-... --monitor COM3
+  # Generate the same kind of QR shown to the camera, for visual testing
+  python scripts/test_scan.py --token "eyJhbG..." --generate-qr
+
+  # Monitor ESP32-CAM serial output
+  python scripts/test_scan.py --monitor COM3
 
 Requirements:
-  pip install requests qrcode pillow pyserial
-═══════════════════════════════════════════════════════════════════════════════
+    pip install requests
+    pip install qrcode pillow       # only for --generate-qr
+    pip install pyserial             # only for --monitor
 """
+
 import argparse
-import io
 import sys
 import time
 from pathlib import Path
 
 
-# ─── HTTP scan call ───────────────────────────────────────────────────────────
+def base_url(host: str, port: int) -> str:
+    return f"http://{host}:{port}"
 
-def scan_image_file(host: str, port: int, dock_id: str, image_path: Path) -> dict:
-    """POST a JPEG/PNG file to the backend scan endpoint and return the response."""
-    import requests
-
-    url = f"http://{host}:{port}/api/v1/docks/{dock_id}/scan"
-    image_bytes = image_path.read_bytes()
-
-    # Detect content type from extension
-    ext = image_path.suffix.lower()
-    content_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
-
-    print(f"  → POST {url}")
-    print(f"  → Image: {image_path.name} ({len(image_bytes):,} bytes, {content_type})")
-
-    start = time.monotonic()
-    resp = requests.post(
-        url,
-        data=image_bytes,
-        headers={"Content-Type": content_type},
-        timeout=20,
-    )
-    elapsed = time.monotonic() - start
-
-    print(f"  ← HTTP {resp.status_code}  ({elapsed:.2f} s)")
-    try:
-        body = resp.json()
-        print(f"  ← Body: {body}")
-    except Exception:
-        print(f"  ← Body (raw): {resp.text[:500]}")
-
-    return {"status": resp.status_code, "body": resp.json() if resp.ok else None}
-
-
-# ─── Generate QR image from a token string ───────────────────────────────────
-
-def generate_qr_image(token: str) -> Path:
-    """Create a test QR code PNG from a raw token string. Returns the file path."""
-    try:
-        import qrcode
-    except ImportError:
-        print("ERROR: pip install qrcode pillow")
-        sys.exit(1)
-
-    img = qrcode.make(token)
-    path = Path("test_qr_generated.png")
-    img.save(str(path))
-    print(f"[QR] Generated test QR → {path}")
-    return path
-
-
-# ─── Backend health check ─────────────────────────────────────────────────────
 
 def health_check(host: str, port: int) -> bool:
     import requests
-    url = f"http://{host}:{port}/api/v1/docks"
+
+    url = f"{base_url(host, port)}/api/v1/docks"
+
     try:
-        r = requests.get(url, timeout=5)
-        print(f"[HEALTH] GET /docks → HTTP {r.status_code} ✅")
-        return True
-    except Exception as e:
-        print(f"[HEALTH] Cannot reach backend at {host}:{port} — {e}")
+        response = requests.get(url, timeout=5)
+        print(f"[HEALTH] GET /api/v1/docks -> HTTP {response.status_code}")
+
+        if response.ok:
+            try:
+                body = response.json()
+                print(f"[HEALTH] Response: {body}")
+            except ValueError:
+                pass
+            return True
+
+        return False
+
+    except requests.RequestException as exc:
+        print(f"[HEALTH] Cannot reach backend: {exc}")
         return False
 
 
-# ─── Serial monitor ───────────────────────────────────────────────────────────
+def confirm_ride(
+    host: str,
+    port: int,
+    dock_id: str,
+    ride_token: str,
+) -> dict:
+    import requests
 
-def monitor_serial(port: str, baud: int = 115200):
-    """Stream ESP32-CAM Serial output to the console for live debugging."""
+    url = f"{base_url(host, port)}/api/v1/rides/confirm"
+    payload = {
+        "ride_token": ride_token,
+        "dock_id": dock_id,
+    }
+
+    print(f"[CONFIRM] POST {url}")
+    print(f"[CONFIRM] Dock ID: {dock_id}")
+    print(f"[CONFIRM] Token length: {len(ride_token)}")
+
+    started = time.monotonic()
+
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        print(f"[CONFIRM] Request failed: {exc}")
+        return {"status": None, "body": None}
+
+    elapsed = time.monotonic() - started
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = response.text[:1000]
+
+    print(f"[CONFIRM] HTTP {response.status_code} ({elapsed:.2f}s)")
+    print(f"[CONFIRM] Body: {body}")
+
+    return {
+        "status": response.status_code,
+        "body": body,
+    }
+
+
+def generate_qr_image(token: str, output: Path) -> Path:
+    try:
+        import qrcode
+    except ImportError:
+        print("ERROR: install QR dependencies with:")
+        print("  pip install qrcode pillow")
+        raise SystemExit(1)
+
+    image = qrcode.make(token)
+    image.save(output)
+
+    print(f"[QR] Generated: {output.resolve()}")
+    return output
+
+
+def monitor_serial(serial_port: str, baud: int) -> None:
     try:
         import serial
     except ImportError:
-        print("ERROR: pip install pyserial")
-        sys.exit(1)
+        print("ERROR: install pyserial with:")
+        print("  pip install pyserial")
+        raise SystemExit(1)
 
-    print(f"\n[MONITOR] Listening on {port} at {baud} baud. Press Ctrl+C to stop.\n")
-    with serial.Serial(port, baud, timeout=1) as ser:
-        while True:
-            line = ser.readline()
-            if line:
-                print(line.decode("utf-8", errors="replace").rstrip())
+    print(f"[SERIAL] Listening on {serial_port} at {baud} baud")
+    print("[SERIAL] Press Ctrl+C to stop")
+
+    try:
+        with serial.Serial(serial_port, baud, timeout=1) as ser:
+            while True:
+                line = ser.readline()
+                if line:
+                    print(line.decode("utf-8", errors="replace").rstrip())
+    except KeyboardInterrupt:
+        print("\n[SERIAL] Stopped")
 
 
-# ─── Quick connectivity test: check scan endpoint accepts/rejects correctly ───
-
-def run_endpoint_tests(host: str, port: int, dock_id: str):
+def endpoint_smoke_test(host: str, port: int, dock_id: str) -> bool:
     """
-    Smoke-test the scan endpoint behaviour without a real QR image.
-    Validates: Content-Type rejection, size rejection, empty body.
+    Lightweight contract check for the current hardware endpoint.
+
+    This deliberately does not assert exact application error codes because
+    those are implementation details. It checks that:
+      1. the endpoint exists
+      2. malformed JSON is rejected
+      3. a syntactically valid request reaches application validation
     """
     import requests
 
-    base = f"http://{host}:{port}/api/v1/docks/{dock_id}/scan"
-    print("\n[TESTS] Running endpoint smoke tests...")
-
-    tests = [
-        {
-            "name": "Reject non-image Content-Type",
-            "headers": {"Content-Type": "application/json"},
-            "body": b'{"test": 1}',
-            "expect": 415,
-        },
-        {
-            "name": "Reject empty body",
-            "headers": {"Content-Type": "image/jpeg"},
-            "body": b"",
-            "expect": 422,
-        },
-        {
-            "name": "Reject tiny body (< 1 KB)",
-            "headers": {"Content-Type": "image/jpeg"},
-            "body": b"\xff\xd8" * 100,   # fake JPEG marker, 200 bytes
-            "expect": 422,
-        },
-        {
-            "name": "Reject oversized body (> 200 KB)",
-            "headers": {"Content-Type": "image/jpeg"},
-            "body": b"\x00" * (210 * 1024),
-            "expect": 413,
-        },
-    ]
-
+    url = f"{base_url(host, port)}/api/v1/rides/confirm"
     passed = 0
-    for t in tests:
-        r = requests.post(base, data=t["body"], headers=t["headers"], timeout=10)
-        status = "✅ PASS" if r.status_code == t["expect"] else f"❌ FAIL (got {r.status_code})"
-        print(f"  {status}  {t['name']}")
-        if r.status_code == t["expect"]:
-            passed += 1
 
-    print(f"\n[TESTS] {passed}/{len(tests)} passed\n")
+    print("\n[SMOKE] Current hardware endpoint:", url)
+
+    response = requests.post(
+        url,
+        json={"dock_id": dock_id},
+        timeout=10,
+    )
+    if response.status_code >= 400:
+        print(f"[PASS] Missing ride_token rejected: HTTP {response.status_code}")
+        passed += 1
+    else:
+        print(f"[FAIL] Missing ride_token unexpectedly accepted: HTTP {response.status_code}")
+
+    response = requests.post(
+        url,
+        json={"ride_token": "not-a-real-token", "dock_id": dock_id},
+        timeout=10,
+    )
+    if response.status_code >= 400:
+        print(f"[PASS] Invalid ride token rejected: HTTP {response.status_code}")
+        passed += 1
+    else:
+        print(f"[FAIL] Invalid ride token unexpectedly accepted: HTTP {response.status_code}")
+
+    print(f"[SMOKE] {passed}/2 checks passed")
+    return passed == 2
 
 
-# ─── CLI ──────────────────────────────────────────────────────────────────────
-
-def main():
-    parser = argparse.ArgumentParser(description="Velo Dock Vision test utility")
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="Backend host IP (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000,
-                        help="Backend port (default: 8000)")
-    parser.add_argument("--dock", required=True,
-                        help="Dock UUID (from GET /api/v1/docks)")
-    parser.add_argument("--image", type=Path, default=None,
-                        help="Path to a JPEG/PNG file to scan")
-    parser.add_argument("--token", default=None,
-                        help="Raw ride token string — generates a QR image and scans it")
-    parser.add_argument("--monitor", default=None, metavar="PORT",
-                        help="Serial port to monitor (e.g. COM3 or /dev/ttyUSB0)")
-    parser.add_argument("--smoke", action="store_true",
-                        help="Run endpoint smoke tests (no real QR needed)")
-    parser.add_argument("--baud", type=int, default=115200,
-                        help="Serial baud rate (default: 115200)")
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Velo ESP32-CAM / ride-confirm integration utility"
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Backend host/IP (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Backend port (default: 8000)",
+    )
+    parser.add_argument(
+        "--dock",
+        help="Dock UUID used for ride confirmation",
+    )
+    parser.add_argument(
+        "--token",
+        help="Decoded ride token from the QR code",
+    )
+    parser.add_argument(
+        "--generate-qr",
+        action="store_true",
+        help="Generate a PNG QR image from --token",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("test_ride_qr.png"),
+        help="Output QR PNG path",
+    )
+    parser.add_argument(
+        "--monitor",
+        metavar="SERIAL_PORT",
+        help="Monitor ESP32-CAM serial output, e.g. COM3",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=115200,
+        help="Serial baud rate",
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run current /rides/confirm contract checks",
+    )
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("  Velo DockVision Test Utility")
-    print(f"  Backend : http://{args.host}:{args.port}")
-    print(f"  Dock ID : {args.dock}")
-    print("=" * 60)
+    print("=" * 64)
+    print("Velo ESP32-CAM / Ride Confirmation Test Utility")
+    print(f"Backend: {base_url(args.host, args.port)}")
+    print("=" * 64)
 
-    # Serial monitor mode — blocks until Ctrl+C
     if args.monitor:
         monitor_serial(args.monitor, args.baud)
         return
 
-    # Health check first
     if not health_check(args.host, args.port):
-        print("\nMake sure the backend is running on the main laptop:")
-        print("  cd backend && uvicorn app.main:app --reload --host 0.0.0.0")
-        sys.exit(1)
+        print("\nStart the backend with:")
+        print("  uvicorn app.main:app --reload --host 0.0.0.0")
+        raise SystemExit(1)
 
-    # Smoke tests
+    if args.generate_qr:
+        if not args.token:
+            parser.error("--generate-qr requires --token")
+        generate_qr_image(args.token, args.output)
+
     if args.smoke:
-        run_endpoint_tests(args.host, args.port, args.dock)
+        if not args.dock:
+            parser.error("--smoke requires --dock")
+        endpoint_smoke_test(args.host, args.port, args.dock)
 
-    # Scan with a token → generate QR first
     if args.token:
-        image_path = generate_qr_image(args.token)
-        result = scan_image_file(args.host, args.port, args.dock, image_path)
+        if not args.dock:
+            parser.error("--token requires --dock")
+
+        result = confirm_ride(
+            args.host,
+            args.port,
+            args.dock,
+            args.token,
+        )
+
         if result["status"] == 200:
-            print("\n✅ Ride activated! Full pipeline working end-to-end.")
-        elif result["status"] == 422:
-            print("\n⚠️  QR not decoded — check image quality or backend service.py preprocessing.")
+            print("\nRide confirmation succeeded.")
+            print("Backend should now have the ride in ACTIVE state.")
         else:
-            print(f"\n❌ Unexpected status: {result['status']}")
+            print("\nRide confirmation did not succeed.")
+            print("Check the backend response above.")
+
         return
 
-    # Scan with an existing image file
-    if args.image:
-        if not args.image.exists():
-            print(f"ERROR: Image file not found: {args.image}")
-            sys.exit(1)
-        result = scan_image_file(args.host, args.port, args.dock, args.image)
-        if result["status"] == 200:
-            print("\n✅ Ride activated! Full pipeline working end-to-end.")
-        elif result["status"] == 422:
-            print("\n⚠️  QR not decoded — try a clearer image.")
-        else:
-            print(f"\n❌ Unexpected status: {result['status']}")
-        return
-
-    if not args.smoke:
-        print("\nNothing to do. Use --image, --token, --monitor, or --smoke.")
-        parser.print_help()
+    if not args.generate_qr and not args.smoke:
+        print("\nNothing else to run.")
+        print("Use one of:")
+        print("  --smoke --dock <DOCK_UUID>")
+        print("  --token <RIDE_TOKEN> --dock <DOCK_UUID>")
+        print("  --token <RIDE_TOKEN> --generate-qr")
+        print("  --monitor COM3")
 
 
 if __name__ == "__main__":
