@@ -13,3 +13,4 @@ htmlcov/
 *.log
 .venv/
 venv/
+debug_scans/
