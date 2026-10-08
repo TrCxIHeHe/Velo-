@@ -43,6 +43,17 @@ from app.models import User
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
+# ── Debug scan images: never write into the real backend/debug_scans ────────
+
+@pytest.fixture(autouse=True)
+def debug_scan_dir(tmp_path, monkeypatch):
+    from app.dock_vision import router as dock_vision_router
+
+    target = tmp_path / "debug_scans"
+    monkeypatch.setattr(dock_vision_router, "DEBUG_SCAN_DIR", target)
+    return target
+
+
 # ── DB engine — fresh in-memory SQLite per test function ─────────────────────
 
 @pytest_asyncio.fixture(scope="function")

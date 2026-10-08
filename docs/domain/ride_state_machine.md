@@ -554,3 +554,31 @@ These rules must never be violated.
 6. Cancelled rides cannot be restarted
 
 7. Ride state transitions must follow this document
+
+
+---
+
+# Addendum — implemented token-phase lifecycle (dock-vision)
+
+The currently implemented ride service uses this reduced set of states for the
+QR-unlock phase (the table above is the longer-term design):
+
+```text
+PENDING
+├── valid scan (POST /docks/{id}/scan or /rides/confirm) → ACTIVE
+├── explicit cancel (POST /rides/{id}/cancel)             → CANCELLED
+├── newer token requested while this one is still valid   → CANCELLED (superseded)
+└── token TTL elapsed without a valid scan                → EXPIRED
+```
+
+* Expiry is derived from `created_at + RIDE_TOKEN_TTL_SECONDS` (always >= the
+  JWT `exp`), so a ride is never expired while its JWT is still valid.
+* `PENDING → EXPIRED` is applied lazily (token request, `GET /rides/{id}`,
+  `GET /rides/active`, `GET /rides`), so no scheduler is required.
+* Only an ACTIVE ride blocks a new token request.
+* A user has at most one live PENDING ride: requesting a new token cancels a
+  still-valid older one (after the new request passes validation).
+* Scan semantics are unchanged: expired JWT → `RIDE_TOKEN_EXPIRED`; a
+  cancelled/superseded token → `RIDE_TOKEN_INVALID`; a used token →
+  `RIDE_TOKEN_REUSED`. The Redis one-time-use lock is untouched.
+* No schema change: `rides.status` is a plain `String(20)`.

@@ -21,10 +21,28 @@ class RideRepository:
         return result.scalar_one_or_none()
 
     async def find_active_for_user(self, user_id: uuid.UUID) -> Ride | None:
+        """Newest PENDING/ACTIVE ride for the user.
+
+        ``limit(1)`` + ordering keeps this safe even if legacy data holds more
+        than one open ride (``scalar_one_or_none`` would raise
+        MultipleResultsFound and turn that into a 500).
+        """
         result = await self.session.execute(
-            select(Ride).where(Ride.user_id == user_id, Ride.status.in_(["PENDING", "ACTIVE"]))
+            select(Ride)
+            .where(Ride.user_id == user_id, Ride.status.in_(["PENDING", "ACTIVE"]))
+            .order_by(Ride.created_at.desc())
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
+
+    async def list_open_for_user(self, user_id: uuid.UUID) -> list[Ride]:
+        """All PENDING/ACTIVE rides for the user, newest first."""
+        result = await self.session.execute(
+            select(Ride)
+            .where(Ride.user_id == user_id, Ride.status.in_(["PENDING", "ACTIVE"]))
+            .order_by(Ride.created_at.desc())
+        )
+        return list(result.scalars())
 
     async def find_by_jti(self, jti: str) -> Ride | None:
         result = await self.session.execute(select(Ride).where(Ride.ride_token_jti == jti))

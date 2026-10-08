@@ -30,6 +30,10 @@
  *   S3  → CAM: [1 byte ACK]
  *              0x4F ('O') = success
  *              0x46 ('F') = frame rejected / retry
+ *            The S3 logs WHY it sent 0x46 (QR not found / token rejected /
+ *            backend or network failure), but the 1-byte ACK cannot carry
+ *            that reason, so the CAM treats every 0x46 the same way and
+ *            relies on MAX_SCAN_RETRIES to bound retries.
  *
  * Arduino IDE:
  *   Board : AI Thinker ESP32-CAM
@@ -307,7 +311,7 @@ void scanWithRetry() {
 
     if (ack == ACK_FAIL) {
       Serial.println(
-        "[SCAN] FAIL — backend did not accept this frame; retrying with fresh capture"
+        "[SCAN] FAIL (0x46) — not accepted (QR not found, token rejected or backend error; see S3 log); retrying with fresh capture"
       );
       continue;
     }

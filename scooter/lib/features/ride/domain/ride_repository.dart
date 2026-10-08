@@ -5,5 +5,6 @@ abstract interface class RideRepository {
   Future<Ride> getRide(String id);
   Future<Ride?> getActiveRide();
   Future<RideToken> requestToken(String dockId);
+  Future<Ride> cancelRide(String rideId);
   Future<Ride> endRide(String rideId, String dockId);
 }

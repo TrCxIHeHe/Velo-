@@ -1,4 +1,12 @@
 """
+OPTIONAL MAINTENANCE / RECOVERY TOOL — not part of normal operation.
+
+Expired PENDING rides are now moved to EXPIRED automatically by the backend
+(see RideService.request_ride_token), and a user can always generate a new QR
+without running this script.  Use it only to force-clear an ACTIVE ride that is
+wedged in development (e.g. hardware never docked), or a PENDING ride you want
+cancelled immediately.
+
 Cancel a PENDING/ACTIVE development ride for a user.
 
 Default test user:

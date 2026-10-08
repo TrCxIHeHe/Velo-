@@ -14,7 +14,8 @@ class Ride(Base):
       PENDING  → user has ride token, hardware not yet confirmed
       ACTIVE   → hardware confirmed unlock, ride in progress
       COMPLETED→ user docked at end dock, fare settled
-      CANCELLED→ token expired or aborted before hardware confirmation
+      CANCELLED→ explicitly cancelled, or superseded by a newer ride token
+      EXPIRED  → ride token TTL elapsed without a valid scan
     """
     __tablename__ = "rides"
 
@@ -27,7 +28,7 @@ class Ride(Base):
     start_dock_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("docks.id", ondelete="RESTRICT"), nullable=False)
     end_dock_id: Mapped[uuid.UUID | None] = mapped_column(GUID, ForeignKey("docks.id", ondelete="RESTRICT"), nullable=True)
 
-    # status: PENDING | ACTIVE | COMPLETED | CANCELLED
+    # status: PENDING | ACTIVE | COMPLETED | CANCELLED | EXPIRED
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", server_default="PENDING", index=True)
 
     ride_token_jti: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)

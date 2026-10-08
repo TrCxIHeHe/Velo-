@@ -3,8 +3,10 @@ dock_vision/router.py — HTTP layer for ESP32-CAM QR scan endpoint.
 """
 
 import logging
+import os
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -16,37 +18,71 @@ from app.core.exceptions import AppException
 from app.core.rate_limit import limiter
 from app.core.response import error_response, success_response
 from app.database import get_db
-from app.dock_vision.service import QrDecodeError, decode_qr_from_image_bytes
+from app.dock_vision.service import QrDecodeError, decode_qr_with_strategy
 from app.ride.router import RideServiceDep
 
 router = APIRouter(prefix="/docks", tags=["dock-vision"])
 logger = logging.getLogger(__name__)
 
-# Development-only scan debugging.
-# These files let us inspect exactly what the ESP32-CAM produced.
-#
+# ── Development-only scan debugging ──────────────────────────────────────────
 # backend/debug_scans/latest.jpg
-# backend/debug_scans/last_fail.jpg
-# backend/debug_scans/last_success.jpg
+#     The frame of the CURRENT scan cycle.  Written synchronously the moment a
+#     frame arrives — before any validation or QR decoding — so it can never
+#     lag behind the frame being processed.  Overwritten by every new frame.
+# backend/debug_scans/success_<YYYYMMDD_HHMMSS_mmm>.jpg
+# backend/debug_scans/failure_<YYYYMMDD_HHMMSS_mmm>.jpg
+#     One permanent file per received frame, named after the FINAL outcome
+#     (success = ride confirmed; failure = anything else: no QR found, QR
+#     decoded but token rejected, oversize/undersize frame, server error).
+#     Never overwritten (created with O_EXCL; a numeric suffix is added on the
+#     rare same-millisecond collision).  Times are server-local.
 DEBUG_SAVE_SCANS = True
 DEBUG_SCAN_DIR = Path(__file__).resolve().parents[2] / "debug_scans"
 
 
-def save_debug_image(filename: str, image_bytes: bytes) -> None:
+def save_latest_image(image_bytes: bytes) -> None:
+    """Write debug_scans/latest.jpg immediately (synchronous by design)."""
     if not DEBUG_SAVE_SCANS:
         return
-
     try:
         DEBUG_SCAN_DIR.mkdir(parents=True, exist_ok=True)
-        path = DEBUG_SCAN_DIR / filename
-        path.write_bytes(image_bytes)
-        logger.info("Debug scan image saved: %s", path)
+        target = DEBUG_SCAN_DIR / "latest.jpg"
+        tmp = DEBUG_SCAN_DIR / "latest.jpg.tmp"
+        tmp.write_bytes(image_bytes)
+        try:
+            # Atomic swap: a viewer never sees a half-written latest.jpg.
+            os.replace(tmp, target)
+        except PermissionError:
+            # Windows: target is open in an image viewer — write in place.
+            target.write_bytes(image_bytes)
+            tmp.unlink(missing_ok=True)
+        logger.info("[SCAN] Saved latest.jpg")
     except OSError as exc:
-        logger.warning(
-            "Could not save debug scan %s: %s",
-            filename,
-            exc,
-        )
+        logger.warning("[SCAN] Could not save latest.jpg: %s", exc)
+
+
+def save_history_image(outcome: str, image_bytes: bytes) -> None:
+    """Persist a unique, never-overwritten historical image for this frame."""
+    if not DEBUG_SAVE_SCANS:
+        return
+    try:
+        DEBUG_SCAN_DIR.mkdir(parents=True, exist_ok=True)
+        now = datetime.now()
+        stamp = f"{now:%Y%m%d_%H%M%S}_{now.microsecond // 1000:03d}"
+        for attempt in range(1000):
+            suffix = "" if attempt == 0 else f"_{attempt}"
+            name = f"{outcome}_{stamp}{suffix}.jpg"
+            try:
+                # "xb" = exclusive create: fails instead of overwriting.
+                with open(DEBUG_SCAN_DIR / name, "xb") as fh:
+                    fh.write(image_bytes)
+            except FileExistsError:
+                continue
+            logger.info("[SCAN] Saved %s", name)
+            return
+        logger.warning("[SCAN] Could not find a free filename for %s_%s", outcome, stamp)
+    except OSError as exc:
+        logger.warning("[SCAN] Could not save %s image: %s", outcome, exc)
 
 
 # OV2640 frames are expected to be small; keep a generous hard limit.
@@ -84,95 +120,81 @@ async def scan_dock_image(
 
     image_bytes = await request.body()
 
-    logger.info(
-        "Dock scan received: dock=%s bytes=%d",
-        dock_id,
-        len(image_bytes),
-    )
+    logger.info("[SCAN] Frame received: %d bytes (dock=%s)", len(image_bytes), dock_id)
 
-    if len(image_bytes) > MAX_IMAGE_BYTES:
-        logger.info(
-            "Dock scan rejected: image too large (%d bytes)",
-            len(image_bytes),
-        )
-        return error_response(
-            "DOCK_SCAN_IMAGE_TOO_LARGE",
-            f"Image exceeds {MAX_IMAGE_BYTES // 1024} KB limit.",
-            413,
-        )
+    # 1) The current frame is on disk BEFORE anything can reject or fail on it.
+    save_latest_image(image_bytes)
 
-    if len(image_bytes) < MIN_IMAGE_BYTES:
-        save_debug_image("latest.jpg", image_bytes)
-        save_debug_image("last_fail.jpg", image_bytes)
-
-        logger.info(
-            "Dock scan rejected: image too small (%d bytes)",
-            len(image_bytes),
-        )
-
-        return error_response(
-            "DOCK_SCAN_IMAGE_TOO_SMALL",
-            "Image too small to be a real camera frame.",
-            422,
-        )
-
-    # Always keep the most recent frame for physical debugging.
-    save_debug_image("latest.jpg", image_bytes)
-
-    audit = AuditLogRepository(session)
-
+    # 2) Exactly one historical file per frame, named after the final outcome.
+    #    The default is "failure"; only a confirmed ride flips it to "success".
+    #    try/finally guarantees the frame is archived even if decoding or the
+    #    database raises.
+    outcome = "failure"
     try:
-        decode_start = time.perf_counter()
-        ride_token = decode_qr_from_image_bytes(image_bytes)
-        decode_ms = (time.perf_counter() - decode_start) * 1000
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            logger.info("[SCAN] Rejected: image too large (%d bytes)", len(image_bytes))
+            return error_response(
+                "DOCK_SCAN_IMAGE_TOO_LARGE",
+                f"Image exceeds {MAX_IMAGE_BYTES // 1024} KB limit.",
+                413,
+            )
 
-        logger.info(
-            "Dock scan QR decoded in %.1f ms",
-            decode_ms,
-        )
+        if len(image_bytes) < MIN_IMAGE_BYTES:
+            logger.info("[SCAN] Rejected: image too small (%d bytes)", len(image_bytes))
+            return error_response(
+                "DOCK_SCAN_IMAGE_TOO_SMALL",
+                "Image too small to be a real camera frame.",
+                422,
+            )
 
-    except QrDecodeError as exc:
-        save_debug_image("last_fail.jpg", image_bytes)
+        audit = AuditLogRepository(session)
 
+        try:
+            decode_start = time.perf_counter()
+            ride_token, strategy = decode_qr_with_strategy(image_bytes)
+            decode_ms = (time.perf_counter() - decode_start) * 1000
+            logger.info("[SCAN] QR decoded via %s in %.1f ms", strategy, decode_ms)
+        except QrDecodeError as exc:
+            total_ms = (time.perf_counter() - scan_start) * 1000
+            logger.info("[SCAN] QR not found (%.1f ms): %s", total_ms, exc)
+
+            await audit.log(
+                None,
+                "DOCK_SCAN_FAIL",
+                "dock",
+                str(dock_id),
+                meta=f"bytes={len(image_bytes)} reason={exc}",
+            )
+
+            return error_response(
+                "DOCK_SCAN_QR_NOT_FOUND",
+                str(exc),
+                422,
+            )
+
+        # The QR decoded.  Whether the token is acceptable is a separate
+        # question (invalid / expired / wrong dock / reused / no vehicle).
+        try:
+            ride = await service.confirm_ride(ride_token, dock_id)
+        except AppException as exc:
+            total_ms = (time.perf_counter() - scan_start) * 1000
+            logger.info(
+                "[SCAN] QR decoded but scan rejected: %s (%.1f ms)", exc.code, total_ms
+            )
+
+            await audit.log(
+                None,
+                "DOCK_SCAN_CONFIRM_FAIL",
+                "dock",
+                str(dock_id),
+                meta=f"code={exc.code}",
+            )
+
+            return error_response(exc.code, exc.message, exc.http_status)
+
+        outcome = "success"
         total_ms = (time.perf_counter() - scan_start) * 1000
-
-        logger.info(
-            "Dock scan QR not found in %.1f ms: %s",
-            total_ms,
-            exc,
-        )
-
-        await audit.log(
-            None,
-            "DOCK_SCAN_FAIL",
-            "dock",
-            str(dock_id),
-            meta=f"bytes={len(image_bytes)} reason={exc}",
-        )
-
-        return error_response(
-            "DOCK_SCAN_QR_NOT_FOUND",
-            str(exc),
-            422,
-        )
-
-    try:
-        ride = await service.confirm_ride(
-            ride_token,
-            dock_id,
-        )
-
-        save_debug_image(
-            "last_success.jpg",
-            image_bytes,
-        )
-
-        total_ms = (time.perf_counter() - scan_start) * 1000
-
-        logger.info(
-            "Dock scan SUCCESS in %.1f ms",
-            total_ms,
-        )
+        logger.info("[SCAN] SUCCESS — ride %s confirmed (%.1f ms)", ride.id, total_ms)
 
         await audit.log(
             ride.user_id,
@@ -182,34 +204,6 @@ async def scan_dock_image(
             meta=f"dock={dock_id}",
         )
 
-        return success_response(
-            ride.model_dump()
-        )
-
-    except AppException as exc:
-        save_debug_image(
-            "last_fail.jpg",
-            image_bytes,
-        )
-
-        total_ms = (time.perf_counter() - scan_start) * 1000
-
-        logger.info(
-            "Dock scan confirmation failed in %.1f ms: %s",
-            total_ms,
-            exc.code,
-        )
-
-        await audit.log(
-            None,
-            "DOCK_SCAN_CONFIRM_FAIL",
-            "dock",
-            str(dock_id),
-            meta=f"code={exc.code}",
-        )
-
-        return error_response(
-            exc.code,
-            exc.message,
-            exc.http_status,
-        )
+        return success_response(ride.model_dump())
+    finally:
+        save_history_image(outcome, image_bytes)

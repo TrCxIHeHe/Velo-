@@ -18,6 +18,15 @@
  *              0x4F ('O') = success
  *              0x46 ('F') = retry
  *
+ * ACK protocol limitation (deliberately NOT changed):
+ *   The 1-byte ACK can only say "accepted" (0x4F) or "not accepted" (0x46).
+ *   The S3 classifies every backend outcome (see ScanOutcome below) and logs
+ *   it, but all non-success outcomes map to 0x46, so the CAM cannot tell
+ *   "QR not found" (retry is useful) from "token expired/reused/wrong dock"
+ *   (retrying the same QR cannot succeed) or from a backend/network failure.
+ *   The CAM's bounded retry count (MAX_SCAN_RETRIES) is what limits wasted
+ *   retries.  Telling these apart on the CAM would need a protocol change.
+ *
  * Arduino IDE:
  *   Board     : ESP32S3 Dev Module
  *   Flash     : 8MB
@@ -31,11 +40,11 @@
 const char* WIFI_SSID      = "Vishisht's S24";
 const char* WIFI_PASSWORD  = "124vishi";
 const char* DOCK_ID        = "33333333-3333-3333-3333-333333333333";
-const char* BACKEND_HOST   = "10.242.1.138";
+const char* BACKEND_HOST   = "10.173.247.138";
 const int   BACKEND_PORT   = 8000;
 
 // UART to CAM
-#define CAM_UART_BAUD     921600
+#define CAM_UART_BAUD     115200
 #define CAM_UART_RX_PIN   18
 #define CAM_UART_TX_PIN   17
 
@@ -66,6 +75,16 @@ const int   BACKEND_PORT   = 8000;
 uint8_t* frameBuffer = nullptr;
 uint32_t receivedFrameCounter = 0;
 String backendUrl;
+
+// Backend outcome, as understood by the gateway.
+enum ScanOutcome {
+  OUTCOME_SUCCESS,          // HTTP 200 — ride confirmed
+  OUTCOME_QR_NOT_FOUND,     // 422 DOCK_SCAN_QR_NOT_FOUND — no QR in this frame
+  OUTCOME_TOKEN_REJECTED,   // QR decoded, token not acceptable (401/409)
+  OUTCOME_FRAME_REJECTED,   // 413/415/422(other) — frame itself unusable
+  OUTCOME_RATE_LIMITED,     // 429
+  OUTCOME_TRANSPORT_FAILURE // no WiFi / timeout / connection error / 5xx
+};
 
 void triggerSolenoid() {
 #if ENABLE_SOLENOID
@@ -272,8 +291,33 @@ size_t receiveFrame() {
   return received;
 }
 
-int postToBackend(size_t frameLen) {
+// Pulls "code" out of {"success":false,"error":{"code":"...","message":"..."}}.
+String extractErrorCode(const String& body) {
+  const int key = body.indexOf("\"code\"");
+  if (key < 0) return "";
+  const int colon = body.indexOf(':', key);
+  if (colon < 0) return "";
+  const int q1 = body.indexOf('"', colon + 1);
+  if (q1 < 0) return "";
+  const int q2 = body.indexOf('"', q1 + 1);
+  if (q2 < 0) return "";
+  return body.substring(q1 + 1, q2);
+}
+
+ScanOutcome classifyResult(int httpCode, const String& errorCode) {
+  if (httpCode == 200) return OUTCOME_SUCCESS;
+  if (httpCode <= 0 || httpCode >= 500) return OUTCOME_TRANSPORT_FAILURE;
+  if (httpCode == 429) return OUTCOME_RATE_LIMITED;
+  if (errorCode == "DOCK_SCAN_QR_NOT_FOUND") return OUTCOME_QR_NOT_FOUND;
+  if (httpCode == 401 || httpCode == 409) return OUTCOME_TOKEN_REJECTED;
+  return OUTCOME_FRAME_REJECTED;
+}
+
+// Returns the HTTP status (or a negative HTTPClient error). On an error
+// response, errorCode receives the backend's machine-readable code.
+int postToBackend(size_t frameLen, String& errorCode) {
   const unsigned long start = millis();
+  errorCode = "";
 
   if (!ensureWiFi()) {
     Serial.println("[HTTP] No WiFi — skipping frame");
@@ -304,6 +348,10 @@ int postToBackend(size_t frameLen) {
     );
 
     Serial.printf("[HTTP] Body: %s\n", body.c_str());
+
+    if (code != 200) {
+      errorCode = extractErrorCode(body);
+    }
   } else {
     Serial.printf(
       "[HTTP] Error after %lu ms: %s\n",
@@ -316,6 +364,11 @@ int postToBackend(size_t frameLen) {
   return code;
 }
 
+void sendAck(uint8_t ack) {
+  Serial1.write(ack);
+  Serial1.flush();
+}
+
 void handleScan() {
   const size_t frameLen = receiveFrame();
 
@@ -324,52 +377,61 @@ void handleScan() {
   }
 
   const unsigned long scanStart = millis();
-  const int httpCode = postToBackend(frameLen);
+  String errorCode;
+  const int httpCode = postToBackend(frameLen, errorCode);
+  const ScanOutcome outcome = classifyResult(httpCode, errorCode);
 
   Serial.printf(
     "[SCAN] Frame processing path: %lu ms\n",
     millis() - scanStart
   );
 
-  if (httpCode == 200) {
-    Serial1.write(ACK_OK);
-    Serial1.flush();
-
+  switch (outcome) {
+    case OUTCOME_SUCCESS:
+      sendAck(ACK_OK);
 #if ENABLE_SOLENOID
-    Serial.println("[SCAN] SUCCESS — ride confirmed; triggering solenoid");
-    triggerSolenoid();
+      Serial.println("[SCAN] SUCCESS — ride confirmed; triggering solenoid");
+      triggerSolenoid();
 #else
-    Serial.println("[SCAN] SUCCESS — ride confirmed; solenoid DISABLED");
+      Serial.println("[SCAN] SUCCESS — ride confirmed; solenoid DISABLED");
 #endif
-    return;
+      return;
+
+    case OUTCOME_QR_NOT_FOUND:
+      Serial.println("[SCAN] QR not found in this frame — ACK_FAIL (camera should retry)");
+      break;
+
+    case OUTCOME_TOKEN_REJECTED:
+      // Includes RIDE_TOKEN_EXPIRED / INVALID / REUSED, RIDE_DOCK_MISMATCH,
+      // VEHICLE_UNAVAILABLE. Not a camera fault. The 1-byte ACK cannot say so.
+      Serial.printf(
+        "[SCAN] QR read but token rejected (HTTP %d, %s) — ACK_FAIL\n",
+        httpCode,
+        errorCode.length() ? errorCode.c_str() : "no code"
+      );
+      break;
+
+    case OUTCOME_FRAME_REJECTED:
+      Serial.printf(
+        "[SCAN] Frame rejected by backend (HTTP %d, %s) — ACK_FAIL\n",
+        httpCode,
+        errorCode.length() ? errorCode.c_str() : "no code"
+      );
+      break;
+
+    case OUTCOME_RATE_LIMITED:
+      Serial.println("[SCAN] Backend rate limit (429) — ACK_FAIL");
+      break;
+
+    case OUTCOME_TRANSPORT_FAILURE:
+      Serial.printf(
+        "[SCAN] Transport/backend failure (%d) — not a QR problem — ACK_FAIL\n",
+        httpCode
+      );
+      break;
   }
 
-  if (httpCode == 422) {
-    Serial.println(
-      "[SCAN] QR not decoded in this frame — sending FAIL"
-    );
-    Serial1.write(ACK_FAIL);
-    Serial1.flush();
-    return;
-  }
-
-  if (httpCode == 409 || httpCode == 410) {
-    Serial.printf(
-      "[SCAN] Token rejected (%d) — sending FAIL\n",
-      httpCode
-    );
-    Serial1.write(ACK_FAIL);
-    Serial1.flush();
-    return;
-  }
-
-  Serial.printf(
-    "[SCAN] HTTP/network failure (%d) — sending FAIL\n",
-    httpCode
-  );
-
-  Serial1.write(ACK_FAIL);
-  Serial1.flush();
+  sendAck(ACK_FAIL);
 }
 
 void setup() {

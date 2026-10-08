@@ -41,6 +41,17 @@ class RideRemoteDataSource {
     }
   }
 
+  /// Cancels a PENDING ride (e.g. the user left the QR screen). Idempotent on
+  /// the server for rides that are already CANCELLED/EXPIRED.
+  Future<Ride> cancelRide(String rideId) async {
+    try {
+      final r = await _dio.post('${ApiConstants.rides}/$rideId/cancel');
+      return Ride.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
   Future<Ride> endRide(String rideId, String dockId) async {
     try {
       final r = await _dio.post(

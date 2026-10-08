@@ -18,5 +18,8 @@ class RideRepositoryImpl implements RideRepository {
   Future<RideToken> requestToken(String dockId) => _remote.requestToken(dockId);
 
   @override
+  Future<Ride> cancelRide(String rideId) => _remote.cancelRide(rideId);
+
+  @override
   Future<Ride> endRide(String rideId, String dockId) => _remote.endRide(rideId, dockId);
 }

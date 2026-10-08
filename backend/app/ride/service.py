@@ -4,6 +4,15 @@ Ride lifecycle:
   2. Hardware at dock verifies ride token  → ACTIVE ride, vehicle assigned, slot freed
   3. User docks at end dock               → COMPLETED, fare calculated & charged, new slot occupied
 
+Pre-hardware (PENDING) terminal states:
+  PENDING → ACTIVE     valid scan
+  PENDING → CANCELLED  explicit cancel, or superseded by a newer token request
+  PENDING → EXPIRED    ride token TTL elapsed without a valid scan
+
+A PENDING ride whose token has expired can never be confirmed (the JWT is
+rejected), so it is moved to EXPIRED lazily — whenever the owner requests a new
+token, reads the ride, or lists rides — instead of blocking the user.
+
 Fare: 2 INR/minute, minimum 5 INR.
 """
 import uuid
@@ -38,6 +47,20 @@ def _aware_utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _token_deadline(ride) -> datetime:
+    """Naive-UTC instant at which the ride's token is guaranteed to be expired.
+
+    The JWT ``exp`` is ``iat + TTL`` and ``ride.created_at`` is written after
+    ``iat``, so ``created_at + TTL >= exp``.  A ride is therefore never marked
+    EXPIRED while its token is still valid.
+    """
+    return ride.created_at + timedelta(seconds=settings.RIDE_TOKEN_TTL_SECONDS)
+
+
+def _is_stale_pending(ride, now: datetime) -> bool:
+    return ride.status == "PENDING" and now >= _token_deadline(ride)
+
+
 def _calculate_fare(duration_seconds: int) -> float:
     minutes = ceil(duration_seconds / 60)
     fare = max(minutes * FARE_PER_MINUTE, MINIMUM_FARE)
@@ -67,11 +90,28 @@ class RideService:
         if self.notification_service is not None:
             await self.notification_service.notify(user_id, type_, title, body)
 
+    async def _expire_ride(self, ride):
+        ride = await self.ride_repo.update(ride.id, status="EXPIRED")
+        await self.audit_repo.log(ride.user_id, "RIDE_TOKEN_EXPIRED", "ride", str(ride.id))
+        return ride
+
+    async def _expire_stale_pending(self, user_id: uuid.UUID) -> None:
+        """Move every PENDING ride of this user whose token has expired to EXPIRED."""
+        now = _utcnow()
+        for ride in await self.ride_repo.list_open_for_user(user_id):
+            if _is_stale_pending(ride, now):
+                await self._expire_ride(ride)
+
     async def request_ride_token(self, user_id: uuid.UUID, dock_id: uuid.UUID) -> RideTokenResponse:
-        # Check no active ride
-        existing = await self.ride_repo.find_active_for_user(user_id)
-        if existing:
+        # 1. Expired PENDING rides can never complete — retire them so they
+        #    cannot block a new token.
+        await self._expire_stale_pending(user_id)
+
+        # 2. Only a genuinely ACTIVE ride blocks a new token.
+        open_rides = await self.ride_repo.list_open_for_user(user_id)
+        if any(r.status == "ACTIVE" for r in open_rides):
             raise RideAlreadyActiveError()
+        still_pending = [r for r in open_rides if r.status == "PENDING"]
 
         # Dock must exist and be active
         dock = await self.dock_repo.find_by_id(dock_id)
@@ -87,6 +127,17 @@ class RideService:
         has_balance = await self.wallet_service.check_sufficient_for_ride(user_id)
         if not has_balance:
             raise InsufficientBalanceError()
+
+        # 3. The user explicitly asked for another QR while a previous one is
+        #    still valid: supersede it so there is never more than one live
+        #    PENDING ride.  Done only after all validations pass so a failed
+        #    request does not destroy a working token.  The old JWT can no
+        #    longer be confirmed: its ride is no longer PENDING.
+        for old in still_pending:
+            await self.ride_repo.update(old.id, status="CANCELLED")
+            await self.audit_repo.log(
+                user_id, "RIDE_TOKEN_SUPERSEDED", "ride", str(old.id)
+            )
 
         # Issue short-lived JWT ride token
         jti = str(uuid.uuid4())
@@ -149,6 +200,11 @@ class RideService:
 
         ride = await self.ride_repo.find_by_jti(jti)
         if not ride:
+            raise RideTokenInvalidError()
+        if ride.status == "EXPIRED":
+            raise RideTokenExpiredError()
+        if ride.status == "CANCELLED":
+            # Explicitly cancelled or superseded by a newer QR: revoked token.
             raise RideTokenInvalidError()
         if ride.status != "PENDING":
             raise RideTokenReusedError()
@@ -243,15 +299,39 @@ class RideService:
             raise RideNotFoundError()
         if ride.user_id != user_id:
             raise RideForbiddenError()
+        if _is_stale_pending(ride, _utcnow()):
+            ride = await self._expire_ride(ride)
+        return RideResponse.model_validate(ride)
+
+    async def cancel_pending_ride(self, user_id: uuid.UUID, ride_id: uuid.UUID) -> RideResponse:
+        """Explicitly cancel a PENDING ride (e.g. user left the QR screen).
+
+        Idempotent for rides that already ended up CANCELLED/EXPIRED.
+        ACTIVE/COMPLETED rides cannot be cancelled here.
+        """
+        ride = await self.ride_repo.find_by_id(ride_id)
+        if not ride:
+            raise RideNotFoundError()
+        if ride.user_id != user_id:
+            raise RideForbiddenError()
+        if _is_stale_pending(ride, _utcnow()):
+            ride = await self._expire_ride(ride)
+        if ride.status == "PENDING":
+            ride = await self.ride_repo.update(ride.id, status="CANCELLED")
+            await self.audit_repo.log(user_id, "RIDE_CANCELLED", "ride", str(ride.id))
+        elif ride.status not in ("CANCELLED", "EXPIRED"):
+            raise RideInvalidStateError()
         return RideResponse.model_validate(ride)
 
     async def get_active_ride(self, user_id: uuid.UUID) -> RideResponse | None:
+        await self._expire_stale_pending(user_id)
         ride = await self.ride_repo.find_active_for_user(user_id)
         if not ride:
             return None
         return RideResponse.model_validate(ride)
 
     async def list_rides(self, user_id: uuid.UUID, skip: int = 0, limit: int = 20) -> RideListResponse:
+        await self._expire_stale_pending(user_id)
         rides, total = await self.ride_repo.list_for_user(user_id, skip, limit)
         return RideListResponse(
             items=[RideResponse.model_validate(r) for r in rides],

@@ -6,3 +6,4 @@ aiosqlite==0.20.0
 fakeredis
 black
 ruff
+qrcode[pil]

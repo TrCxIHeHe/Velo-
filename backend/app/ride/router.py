@@ -74,6 +74,16 @@ async def end_ride(ride_id: uuid.UUID, body: EndRideRequest, current_user: Curre
         return error_response(exc.code, exc.message, exc.http_status)
 
 
+@router.post("/{ride_id}/cancel")
+async def cancel_ride(ride_id: uuid.UUID, current_user: CurrentUser, service: RideServiceDep):
+    """Cancel a PENDING ride (e.g. the user closed the QR screen)."""
+    try:
+        ride = await service.cancel_pending_ride(current_user.id, ride_id)
+        return success_response(ride.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
+
+
 @router.get("/active")
 async def get_active_ride(current_user: CurrentUser, service: RideServiceDep):
     ride = await service.get_active_ride(current_user.id)
