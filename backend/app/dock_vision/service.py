@@ -27,7 +27,7 @@ QR sits at a particular position in the 320x240 frame.
 A QR that cannot be decoded raises QrDecodeError (→ DOCK_SCAN_QR_NOT_FOUND).
 Whatever the QR *contains* (valid / expired / wrong dock JWT) is decided later
 by the ride service — this module never looks inside the payload, and never
-logs it (the payload is a ride JWT).
+logs it (the payload is a ride credential).
 """
 from __future__ import annotations
 
@@ -53,6 +53,16 @@ except (ImportError, OSError):  # pragma: no cover - environment dependent
         "pyzbar / libzbar not available — decoding with OpenCV only. "
         "Install: pip install pyzbar  (Ubuntu: apt install libzbar0)"
     )
+
+# ZXing-C++ is an independent QR decoder. Keep the pipeline usable if its
+# native extension is unavailable in a developer environment.
+try:
+    import zxingcpp
+
+    _ZXING_AVAILABLE = True
+except (ImportError, OSError):  # pragma: no cover - environment dependent
+    _ZXING_AVAILABLE = False
+    logger.warning("zxing-cpp is not available; skipping that QR strategy")
 
 MIN_IMAGE_BYTES = 1024
 
@@ -100,6 +110,21 @@ def _opencv_aruco(img: np.ndarray) -> Optional[str]:
     except cv2.error as exc:
         logger.warning("[QR] OpenCV QRCodeDetectorAruco raised %s", type(exc).__name__)
         return None
+
+
+def _zxing(img: np.ndarray) -> Optional[str]:
+    """Decode QR text with ZXing-C++ without logging the credential itself."""
+    if not _ZXING_AVAILABLE:
+        return None
+    try:
+        results = zxingcpp.read_barcodes(img, formats=zxingcpp.BarcodeFormat.QRCode)
+        for result in results:
+            text = getattr(result, "text", "")
+            if text:
+                return text
+    except Exception as exc:  # native decoder errors must not become a 500
+        logger.warning("[QR] ZXing-C++ raised %s", type(exc).__name__)
+    return None
 
 
 # ─── Image variants (only built when a fallback needs them) ──────────────────
@@ -250,6 +275,10 @@ def decode_qr_with_strategy(image_bytes: bytes) -> tuple[str, str]:
         if text:
             return done(text, "pyzbar-gray")
 
+    text = _try("ZXing-C++", _zxing, gray)
+    if text:
+        return done(text, "zxingcpp-gray")
+
     text = _try("OpenCV QRCodeDetector", _opencv, gray)
     if text:
         return done(text, "opencv-qrdetector-gray")
@@ -260,7 +289,9 @@ def decode_qr_with_strategy(image_bytes: bytes) -> tuple[str, str]:
         return done(text, "opencv-aruco-qrdetector-gray")
 
     for name, variant in _variant_stages(gray):
-        for suffix, fn in (("pyzbar", _pyzbar), ("opencv", _opencv)):
+        for suffix, fn in (("zxingcpp", _zxing), ("pyzbar", _pyzbar), ("opencv", _opencv)):
+            if fn is _zxing and not _ZXING_AVAILABLE:
+                continue
             if fn is _pyzbar and not _PYZBAR_AVAILABLE:
                 continue
             text = _try(f"{name}+{suffix}", fn, variant)
@@ -268,7 +299,9 @@ def decode_qr_with_strategy(image_bytes: bytes) -> tuple[str, str]:
                 return done(text, f"{name}-{suffix}")
 
     for name, warped in _perspective_variants(gray):
-        for suffix, fn in (("pyzbar", _pyzbar), ("opencv", _opencv)):
+        for suffix, fn in (("zxingcpp", _zxing), ("pyzbar", _pyzbar), ("opencv", _opencv)):
+            if fn is _zxing and not _ZXING_AVAILABLE:
+                continue
             if fn is _pyzbar and not _PYZBAR_AVAILABLE:
                 continue
             text = _try(f"{name}+{suffix}", fn, warped)

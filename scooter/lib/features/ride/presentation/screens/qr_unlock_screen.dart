@@ -273,8 +273,9 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
                 ),
                 child: QrImageView(
                   data: _token!.rideToken,
-                  size: 220,
+                  size: 280,
                   backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.L,
                 ),
               ),
               const SizedBox(height: 32),

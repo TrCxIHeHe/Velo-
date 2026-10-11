@@ -15,6 +15,8 @@ token, reads the ride, or lists rides — instead of blocking the user.
 
 Fare: 2 INR/minute, minimum 5 INR.
 """
+import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from math import ceil
@@ -37,6 +39,8 @@ from app.wallet.service import WalletService
 
 FARE_PER_MINUTE = 2.0
 MINIMUM_FARE = 5.0
+OPAQUE_RIDE_TOKEN_PREFIX = "rt2_"
+OPAQUE_RIDE_TOKEN_BYTES = 16  # 128 bits of cryptographically secure entropy -> 22 URL-safe chars
 
 
 def _utcnow() -> datetime:
@@ -139,18 +143,10 @@ class RideService:
                 user_id, "RIDE_TOKEN_SUPERSEDED", "ride", str(old.id)
             )
 
-        # Issue short-lived JWT ride token
-        jti = str(uuid.uuid4())
-        now = _aware_utcnow()
-        payload = {
-            "sub": str(user_id),
-            "dock_id": str(dock_id),
-            "type": "ride",
-            "jti": jti,
-            "iat": now,
-            "exp": now + timedelta(seconds=settings.RIDE_TOKEN_TTL_SECONDS),
-        }
-        ride_token = jwt.encode(payload, settings.RIDE_TOKEN_SECRET, algorithm=settings.RIDE_TOKEN_ALGORITHM)
+        # A compact opaque credential keeps the QR sparse enough for a small camera.
+        # Store only its SHA-256 digest in the existing 64-character JTI column.
+        ride_token = OPAQUE_RIDE_TOKEN_PREFIX + secrets.token_urlsafe(OPAQUE_RIDE_TOKEN_BYTES)
+        jti = hashlib.sha256(ride_token.encode("utf-8")).hexdigest()
 
         # Create PENDING ride
         ride = await self.ride_repo.create(user_id, dock_id, jti)
@@ -164,24 +160,38 @@ class RideService:
 
     async def confirm_ride(self, ride_token: str, dock_id: uuid.UUID) -> RideResponse:
         """Called by dock hardware after QR scan."""
-        try:
-            payload = jwt.decode(
-                ride_token,
-                settings.RIDE_TOKEN_SECRET,
-                algorithms=[settings.RIDE_TOKEN_ALGORITHM],
-            )
-            if payload.get("type") != "ride":
+        if ride_token.startswith(OPAQUE_RIDE_TOKEN_PREFIX):
+            # New token format: lookup uses a digest, never the bearer secret itself.
+            jti = hashlib.sha256(ride_token.encode("utf-8")).hexdigest()
+            preliminary_ride = await self.ride_repo.find_by_jti(jti)
+            if not preliminary_ride:
                 raise RideTokenInvalidError()
-        except JWTError as exc:
-            if "expired" in str(exc).lower():
+            # Reject wrong-dock attempts before acquiring the one-time-use lock.
+            if str(dock_id) != str(preliminary_ride.start_dock_id):
+                raise DockMismatchError()
+            if preliminary_ride.status == "EXPIRED" or _is_stale_pending(preliminary_ride, _utcnow()):
                 raise RideTokenExpiredError()
-            raise RideTokenInvalidError() from exc
+        else:
+            # Backward compatibility: accept unexpired JWTs issued before this deployment.
+            try:
+                payload = jwt.decode(
+                    ride_token,
+                    settings.RIDE_TOKEN_SECRET,
+                    algorithms=[settings.RIDE_TOKEN_ALGORITHM],
+                )
+                if payload.get("type") != "ride":
+                    raise RideTokenInvalidError()
+            except JWTError as exc:
+                if "expired" in str(exc).lower():
+                    raise RideTokenExpiredError()
+                raise RideTokenInvalidError() from exc
 
-        # Validate dock matches token
-        if str(dock_id) != payload.get("dock_id"):
-            raise DockMismatchError()
-
-        jti = payload["jti"]
+            # Legacy JWT embeds the dock identifier; keep its original validation.
+            if str(dock_id) != payload.get("dock_id"):
+                raise DockMismatchError()
+            jti = payload.get("jti")
+            if not isinstance(jti, str) or not jti:
+                raise RideTokenInvalidError()
 
         # Atomic one-time-use lock: SETNX is the correct fix for QR replay
         # (a plain read-then-write status check has a TOCTOU race — two

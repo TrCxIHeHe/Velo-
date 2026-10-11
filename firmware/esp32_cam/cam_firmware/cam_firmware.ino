@@ -61,17 +61,19 @@
 #define PCLK_GPIO_NUM     22
 
 // UART link to S3
-#define S3_UART_BAUD     921600
+#define S3_UART_BAUD     115200   // must match CAM_UART_BAUD in s3_gateway.ino
 #define S3_UART_TX_PIN    12
 #define S3_UART_RX_PIN    13
 
 // Feedback
 #define LED_PIN            4
+#define ENABLE_FLASH_LED   0   // GPIO4 = white flash LED (high current; adds to brownout risk). 0 = never lit.
 
 // Timing
 #define CAPTURE_INTERVAL_MS  3500   // Fresh frame about every 3.5 s
 #define RETRY_DELAY_MS       4000   // Delay before retrying a rejected frame
-#define ACK_TIMEOUT_MS      35000   // Maximum wait for S3/backend result
+#define ACK_TIMEOUT_MS      10000   // Max wait for S3/backend result. MUST stay above the S3 worst case
+                                    // (~9 s: WiFi 2 s + connect 2 s + HTTP read 5 s). Normal ACK: ~2-3 s.
 #define MAX_SCAN_RETRIES        3
 #define CHUNK_SIZE            512
 #define DUMMY_FRAMES           10
@@ -80,16 +82,42 @@
 #define ACK_OK    0x4F
 #define ACK_FAIL  0x46
 
+// ── DIAGNOSTICS (temporary) ───────────────────────────────────────────────
+#define BUILD_ID __DATE__ " " __TIME__
+#define VELO_UART_ERR_CB 1   // set to 0 if your Arduino-ESP32 core has no onReceiveError()
+
+volatile uint32_t uartErr[6] = {0, 0, 0, 0, 0, 0};  // NONE,BREAK,BUFFER_FULL,FIFO_OVF,FRAME,PARITY
+
+#if VELO_UART_ERR_CB
+void onUartError(hardwareSerial_error_t e) {
+  if ((int)e >= 0 && (int)e < 6) uartErr[(int)e]++;
+}
+#endif
+
+void logUartErr(const char* tag) {
+  Serial.printf(
+    "[%lu][UART-ERR]%s break=%lu bufFull=%lu fifoOvf=%lu frame=%lu parity=%lu rxPending=%d\n",
+    millis(), tag,
+    (unsigned long)uartErr[1], (unsigned long)uartErr[2], (unsigned long)uartErr[3],
+    (unsigned long)uartErr[4], (unsigned long)uartErr[5], Serial2.available());
+}
+
 bool cameraReady = false;
 uint32_t captureCounter = 0;
 
 void blinkCapture() {
+#if !ENABLE_FLASH_LED
+  return;
+#endif
   digitalWrite(LED_PIN, HIGH);
   delay(60);
   digitalWrite(LED_PIN, LOW);
 }
 
 void blinkSuccess() {
+#if !ENABLE_FLASH_LED
+  return;
+#endif
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH);
     delay(80);
@@ -99,6 +127,9 @@ void blinkSuccess() {
 }
 
 void blinkError() {
+#if !ENABLE_FLASH_LED
+  return;
+#endif
   for (int i = 0; i < 2; i++) {
     digitalWrite(LED_PIN, HIGH);
     delay(180);
@@ -133,16 +164,20 @@ bool initCamera() {
   cfg.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
 
   // Conservative QR-demo configuration.
-  cfg.frame_size   = FRAMESIZE_QVGA;
-  cfg.jpeg_quality = 12;
+  cfg.frame_size   = FRAMESIZE_VGA; 
+  cfg.jpeg_quality = 10;
   cfg.fb_count     = 1;
-  cfg.fb_location  = CAMERA_FB_IN_DRAM;
+  cfg.fb_location  = CAMERA_FB_IN_PSRAM;
 
   esp_err_t err = ESP_FAIL;
   for (int i = 0; i < 3; i++) {
     err = esp_camera_init(&cfg);
     if (err == ESP_OK) {
       Serial.println("[CAM] Camera init OK");
+      {
+        sensor_t* s = esp_camera_sensor_get();
+        if (s) Serial.printf("[CAM] Sensor PID=0x%04X (OV2640=0x26, OV5640=0x5640)\n", s->id.PID);
+      }
       break;
     }
 
@@ -185,7 +220,22 @@ uint8_t captureAndSend() {
 
   Serial.printf("\n[CAM][FRAME %lu] Capturing...\n", (unsigned long)frameId);
 
+  // STALE-FRAME FIX.
+  // With fb_count=1 + CAMERA_GRAB_WHEN_EMPTY the driver captures one frame right
+  // after the PREVIOUS fb_return() and then holds it. Without this block,
+  // fb_get() below would return that held frame (as old as the last cycle,
+  // e.g. 40 s). Return it first; the driver then exposes a NEW frame, and the
+  // fb_get() below waits for that fresh one.
+  {
+    const unsigned long discardStart = millis();
+    camera_fb_t* stale = esp_camera_fb_get();
+    if (stale) esp_camera_fb_return(stale);
+    Serial.printf("[%lu][CAM][F%lu] discarded held frame in %lu ms\n",
+                  millis(), (unsigned long)frameId, millis() - discardStart);
+  }
+
   const unsigned long captureStart = millis();
+  Serial.printf("[%lu][CAM][F%lu] capture start\n", captureStart, (unsigned long)frameId);
   camera_fb_t* fb = esp_camera_fb_get();
   const unsigned long captureMs = millis() - captureStart;
 
@@ -206,6 +256,7 @@ uint8_t captureAndSend() {
                 captureMs);
 
   const unsigned long uartStart = millis();
+  Serial.printf("[%lu][CAM][F%lu] capture end, jpeg=%u bytes\n", uartStart, (unsigned long)frameId, (unsigned)len);
 
   uint8_t header[4] = {
     (uint8_t)(len >> 24),
@@ -214,6 +265,8 @@ uint8_t captureAndSend() {
     (uint8_t)len
   };
 
+  Serial.printf("[%lu][CAM][F%lu] hdr TX start: %02X %02X %02X %02X\n",
+                millis(), (unsigned long)frameId, header[0], header[1], header[2], header[3]);
   if (Serial2.write(header, 4) != 4) {
     Serial.printf("[CAM][FRAME %lu] Failed to write UART header\n",
                   (unsigned long)frameId);
@@ -223,6 +276,7 @@ uint8_t captureAndSend() {
     return 0x00;
   }
 
+  Serial.printf("[%lu][CAM][F%lu] payload TX start\n", millis(), (unsigned long)frameId);
   size_t sent = 0;
 
   while (sent < len) {
@@ -243,7 +297,10 @@ uint8_t captureAndSend() {
     sent += written;
   }
 
+  Serial.printf("[%lu][CAM][F%lu] payload queued (%u bytes); flush start\n",
+                millis(), (unsigned long)frameId, (unsigned)sent);
   Serial2.flush();
+  Serial.printf("[%lu][CAM][F%lu] flush end\n", millis(), (unsigned long)frameId);
   const unsigned long uartMs = millis() - uartStart;
 
   esp_camera_fb_return(fb);
@@ -260,6 +317,7 @@ uint8_t captureAndSend() {
 
   const unsigned long ackStart = millis();
   const unsigned long deadline = ackStart + ACK_TIMEOUT_MS;
+  Serial.printf("[%lu][CAM][F%lu] ACK wait start\n", ackStart, (unsigned long)frameId);
 
   while ((long)(millis() - deadline) < 0) {
     if (Serial2.available()) {
@@ -276,12 +334,15 @@ uint8_t captureAndSend() {
         totalMs
       );
 
+      Serial.printf("[%lu][CAM][F%lu] ACK byte rx 0x%02X; extra bytes pending=%d\n",
+                    millis(), (unsigned long)frameId, ack, Serial2.available());
       return ack;
     }
 
     delay(10);
   }
 
+  logUartErr(" ACK-timeout");
   Serial.printf("[CAM][FRAME %lu] ACK TIMEOUT after %lu ms\n",
                 (unsigned long)frameId,
                 millis() - ackStart);
@@ -341,6 +402,11 @@ void setup() {
     S3_UART_TX_PIN,
     S3_UART_RX_PIN
   );
+
+#if VELO_UART_ERR_CB
+  Serial2.onReceiveError(onUartError);
+#endif
+  Serial.printf("[DIAG] CAM build=%s Serial2.baudRate()=%u\n", BUILD_ID, (unsigned)Serial2.baudRate());
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);

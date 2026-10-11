@@ -56,6 +56,8 @@ async def test_second_confirm_of_same_token_is_rejected(db_session, redis_mock):
 
     ride_service = _build_ride_service(db_session, redis_mock)
     token_result = await ride_service.request_ride_token(user_id, dock_id)
+    assert token_result.ride_token.startswith("rt2_")
+    assert len(token_result.ride_token) == 26
 
     await ride_service.confirm_ride(token_result.ride_token, dock_id)
 
