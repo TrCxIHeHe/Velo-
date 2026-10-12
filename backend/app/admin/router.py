@@ -10,13 +10,14 @@ from app.admin.repository import (
     AdminRideRepository,
     AdminUserRepository,
 )
-from app.admin.schemas import SetUserActiveRequest, SetUserRoleRequest
+from app.admin.schemas import RecoverRideRequest, SetUserActiveRequest, SetUserRoleRequest
 from app.admin.service import AdminService
 from app.audit.repository import AuditLogRepository
 from app.auth.dependencies import CurrentUser, require_role
 from app.core.exceptions import AppException
 from app.core.response import error_response, success_response
 from app.database import get_db
+from app.ride.router import RideServiceDep
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_role("ADMIN"))])
 
@@ -137,3 +138,21 @@ async def list_all_rides(
 ):
     result = await service.list_all_rides(skip, limit, status)
     return success_response(result.model_dump())
+
+
+@router.post("/rides/{ride_id}/recover")
+async def recover_ride(
+    ride_id: uuid.UUID, body: RecoverRideRequest, admin_user: CurrentUser, rides: RideServiceDep
+):
+    """Recover a stuck ride (ADMIN only, audit-logged).
+
+    * PENDING ride -> ``{"action": "cancel_pending"}``.
+    * ACTIVE ride  -> ``{"action": "complete", "dock_id": "<destination>"}``; runs the
+      same validated completion as a normal end (configured fare, free slot, wallet
+      debit). It never just flips an active ride to CANCELLED.
+    """
+    try:
+        ride = await rides.recover_ride(admin_user.id, ride_id, body.action, body.dock_id, body.reason)
+        return success_response(ride.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)

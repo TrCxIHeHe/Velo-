@@ -16,6 +16,7 @@ from app.core.security_headers import SecurityHeadersMiddleware
 from app.dock.router import router as dock_router
 from app.notifications.router import router as notifications_router
 from app.payments.router import router as payments_router
+from app.pricing.router import router as pricing_router
 from app.ride.router import router as ride_router
 from app.wallet.router import router as wallet_router
 from app.dock_vision.router import router as dock_vision_router
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(dock_router, prefix=settings.API_V1_PREFIX)
     app.include_router(wallet_router, prefix=settings.API_V1_PREFIX)
     app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(pricing_router, prefix=settings.API_V1_PREFIX)
     app.include_router(payments_router, prefix=settings.API_V1_PREFIX)
     app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)
     app.include_router(dock_vision_router, prefix=settings.API_V1_PREFIX)

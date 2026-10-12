@@ -185,6 +185,69 @@ class VehicleUnavailableError(AppException):
         return "No vehicle is currently available for assignment."
 
 
+class FareNotConfiguredError(AppException):
+    """No active fare exists for the requested origin → destination dock pair."""
+
+    code = "FARE_NOT_CONFIGURED"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return (
+            "No active fare is configured for this origin and destination dock. "
+            "An administrator must configure it (POST /api/v1/admin/dock-fares)."
+        )
+
+
+class SameDockReturnNotAllowedError(AppException):
+    code = "RIDE_SAME_DOCK_NOT_ALLOWED"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "A ride cannot be ended at the dock it started from. Choose another dock."
+
+
+class CurrencyMismatchError(AppException):
+    code = "CURRENCY_MISMATCH"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "The fare currency does not match the wallet currency."
+
+
+class RideRecoveryError(AppException):
+    """A stuck ride cannot be recovered safely because its records disagree."""
+
+    code = "RIDE_RECOVERY_FAILED"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "The ride could not be recovered safely."
+
+
+class DockPairFareAlreadyExistsError(AppException):
+    code = "FARE_ALREADY_EXISTS"
+    http_status = 409
+
+    def _default_message(self) -> str:
+        return "A fare already exists for this origin and destination dock. Update it instead."
+
+
+class DockPairFareNotFoundError(AppException):
+    code = "FARE_NOT_FOUND"
+    http_status = 404
+
+    def _default_message(self) -> str:
+        return "Dock-pair fare not found."
+
+
+class InvalidFarePairError(AppException):
+    code = "FARE_INVALID_PAIR"
+    http_status = 400
+
+    def _default_message(self) -> str:
+        return "Origin and destination docks must be different."
+
+
 # ── Wallet exceptions (Track B) ──────────────────────────────────────────────
 
 class WalletNotFoundError(AppException):

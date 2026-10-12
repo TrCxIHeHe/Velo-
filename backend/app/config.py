@@ -75,6 +75,10 @@ cF1Pl8Kp8ICTvZ1+SCWS3EzXepfmw3lwgLJIqnqWEdsJ2Tunv5aArbhBQ+Bv+Y41
     RIDE_TOKEN_TTL_SECONDS: int = 60
     VEHICLE_BATTERY_MIN_THRESHOLD: int = 20
 
+    # Pricing: name of the registered PricingStrategy used for quotes and final
+    # fares (see app/pricing). Only "fixed_dock_pair" exists today.
+    PRICING_STRATEGY: str = "fixed_dock_pair"
+
     # CORS — comma-separated origin list. "*" only ever makes sense in dev;
     # main.py refuses to combine it with allow_credentials=True.
     CORS_ORIGINS: str = "*"

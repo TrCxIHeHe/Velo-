@@ -3,7 +3,7 @@ import uuid
 from app.audit.repository import AuditLogRepository
 from app.config import settings
 from app.core.exceptions import (
-    DuplicateReferenceError, InsufficientBalanceError,
+    CurrencyMismatchError, DuplicateReferenceError, InsufficientBalanceError,
     InvalidTransactionAmountError, WalletNotFoundError,
 )
 from app.wallet.repository import WalletRepository
@@ -53,15 +53,21 @@ class WalletService:
         return WalletResponse.model_validate(wallet)
 
     async def debit_for_ride(
-        self, user_id: uuid.UUID, amount: float, ride_id: uuid.UUID
+        self, user_id: uuid.UUID, amount: float, ride_id: uuid.UUID, currency: str | None = None
     ) -> WalletResponse:
-        """Called internally by ride service to settle fare."""
+        """Called internally by ride service to settle fare.
+
+        ``currency`` (when given) must equal the wallet currency: a fare is
+        never silently charged in a different currency.
+        """
         if amount <= 0:
             raise InvalidTransactionAmountError()
 
         wallet = await self.wallet_repo.find_by_user_id_for_update(user_id)
         if wallet is None:
             raise WalletNotFoundError()
+        if currency is not None and wallet.currency.upper() != currency.upper():
+            raise CurrencyMismatchError()
         if wallet.balance < amount:
             raise InsufficientBalanceError()
 

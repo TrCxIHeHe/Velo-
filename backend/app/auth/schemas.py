@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -30,7 +30,7 @@ class UserResponse(BaseModel):
     name: str | None
     role: str
     is_active: bool
-    created_at: datetime
+    created_at: UTCDateTime
 
     model_config = {"from_attributes": True}
 

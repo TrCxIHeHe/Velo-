@@ -39,6 +39,11 @@ class Ride(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fare_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     fare_currency: Mapped[str] = mapped_column(String(10), nullable=False, default="INR", server_default="INR")
+    # Which pricing strategy produced fare_amount, and the record it used (for a
+    # dock-pair fare: dock_pair_fares.id). Plain columns (no FK) so the receipt
+    # keeps explaining the charge even if the tariff row is later removed.
+    pricing_strategy: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    pricing_reference_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),

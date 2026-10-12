@@ -70,9 +70,19 @@ async def test_full_ride_lifecycle_settles_fare_and_notifies(db_session):
     assert ride.status == "ACTIVE"
     assert ride.vehicle_id is not None
 
-    ended = await ride_service.end_ride(user_id, ride.id, dock_id)
+    # Pricing is fixed per directed dock pair and must be configured explicitly
+    # (no fallback formula, same-dock return is not allowed).
+    from decimal import Decimal
+    from app.pricing.repository import DockPairFareRepository
+
+    dest = await DockService(DockRepository(db_session), VehicleRepository(db_session)).create_dock(
+        DockCreate(name="Lifecycle Destination", location_lat=2.0, location_lng=2.0, total_slots=2)
+    )
+    await DockPairFareRepository(db_session).create(dock_id, dest.id, Decimal("25.00"), "INR", True)
+
+    ended = await ride_service.end_ride(user_id, ride.id, dest.id)
     assert ended.status == "COMPLETED"
-    assert ended.fare_amount is not None and ended.fare_amount > 0
+    assert ended.fare_amount == 25.0
 
     wallet = await wallet_service.get_balance(user_id)
     assert wallet.balance == pytest.approx(500.0 - ended.fare_amount)

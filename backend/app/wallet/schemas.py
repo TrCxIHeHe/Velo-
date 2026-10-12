@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,7 @@ class WalletResponse(BaseModel):
     user_id: UUID
     balance: float
     currency: str
-    updated_at: datetime
+    updated_at: UTCDateTime
     model_config = {"from_attributes": True}
 
 
@@ -32,7 +32,7 @@ class TransactionResponse(BaseModel):
     balance_after: float
     reference_id: str | None
     note: str | None
-    created_at: datetime
+    created_at: UTCDateTime
     model_config = {"from_attributes": True}
 
 

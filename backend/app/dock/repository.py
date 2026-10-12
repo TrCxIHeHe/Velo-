@@ -67,6 +67,16 @@ class DockRepository:
         await self.session.execute(update(DockSlot).where(DockSlot.id == slot_id).values(is_occupied=True))
         await self.session.flush()
 
+    async def try_occupy_slot(self, slot_id: uuid.UUID) -> bool:
+        """Occupy the slot only if it is still free. False => someone else took it."""
+        result = await self.session.execute(
+            update(DockSlot)
+            .where(DockSlot.id == slot_id, DockSlot.is_occupied.is_(False))
+            .values(is_occupied=True)
+        )
+        await self.session.flush()
+        return result.rowcount == 1
+
     async def free_slot(self, slot_id: uuid.UUID) -> None:
         await self.session.execute(update(DockSlot).where(DockSlot.id == slot_id).values(is_occupied=False))
         await self.session.flush()

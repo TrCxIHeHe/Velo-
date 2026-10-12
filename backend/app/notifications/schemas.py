@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,8 +13,8 @@ class NotificationResponse(BaseModel):
     type: str
     title: str
     body: str
-    sent_at: datetime | None
-    read_at: datetime | None
+    sent_at: UTCDateTime | None
+    read_at: UTCDateTime | None
     model_config = {"from_attributes": True}
 
 

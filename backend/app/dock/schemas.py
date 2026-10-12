@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -57,7 +57,7 @@ class DockResponse(BaseModel):
     total_slots: int
     is_active: bool
     available_slots: int = 0
-    created_at: datetime
+    created_at: UTCDateTime
     model_config = {"from_attributes": True}
 
 

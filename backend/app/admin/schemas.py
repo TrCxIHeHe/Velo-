@@ -1,8 +1,9 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Dashboard / fleet / revenue stats ───────────────────────────────────────────
@@ -66,10 +67,20 @@ class AuditLogResponse(BaseModel):
     resource_type: str
     resource_id: str | None
     meta: str | None
-    created_at: datetime
+    created_at: UTCDateTime
     model_config = {"from_attributes": True}
 
 
 class AuditLogListResponse(BaseModel):
     items: list[AuditLogResponse]
     total: int
+
+
+class RecoverRideRequest(BaseModel):
+    """Admin recovery of a stuck ride (see RideService.recover_ride)."""
+
+    action: Literal["complete", "cancel_pending"]
+    # Required for an ACTIVE ride: the dock to park the scooter in. It goes
+    # through exactly the same validation/pricing/settlement as a normal end.
+    dock_id: UUID | None = None
+    reason: str = Field(..., min_length=5, max_length=300)

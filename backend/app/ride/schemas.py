@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.core.timeutil import UTCDateTime
 from uuid import UUID
 from pydantic import BaseModel
 
@@ -29,12 +29,14 @@ class RideResponse(BaseModel):
     start_dock_id: UUID
     end_dock_id: UUID | None
     status: str
-    started_at: datetime | None
-    ended_at: datetime | None
+    started_at: UTCDateTime | None
+    ended_at: UTCDateTime | None
     duration_seconds: int | None
     fare_amount: float | None
     fare_currency: str
-    created_at: datetime
+    pricing_strategy: str | None = None
+    pricing_reference_id: UUID | None = None
+    created_at: UTCDateTime
     model_config = {"from_attributes": True}
 
 

@@ -20,6 +20,41 @@ class RideRepository:
         result = await self.session.execute(select(Ride).where(Ride.id == ride_id))
         return result.scalar_one_or_none()
 
+    async def find_by_id_for_update(self, ride_id: uuid.UUID) -> Ride | None:
+        """Lock the ride row (``SELECT ... FOR UPDATE``) for the rest of the
+        transaction, serialising concurrent end/cancel/recover calls. Locking is
+        a no-op on SQLite; :meth:`transition` provides the portable guard."""
+        result = await self.session.execute(
+            select(Ride).where(Ride.id == ride_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def transition(
+        self, ride_id: uuid.UUID, expected_status: str, **values
+    ) -> bool:
+        """Compare-and-set: apply ``values`` only if the ride is still in
+        ``expected_status``. Returns False when another request moved it first.
+
+        This is what makes confirm / cancel / end safe against races even
+        without row locks — an unconditional ``UPDATE ... WHERE id`` would let a
+        late cancel overwrite a concurrent activation.
+        """
+        result = await self.session.execute(
+            update(Ride)
+            .where(Ride.id == ride_id, Ride.status == expected_status)
+            .values(**values)
+        )
+        await self.session.flush()
+        return result.rowcount == 1
+
+    async def refresh(self, ride_id: uuid.UUID) -> Ride | None:
+        """Re-read a ride bypassing the identity map (after a CAS UPDATE)."""
+        result = await self.session.execute(
+            select(Ride).where(Ride.id == ride_id).execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def find_active_for_user(self, user_id: uuid.UUID) -> Ride | None:
         """Newest PENDING/ACTIVE ride for the user.
 

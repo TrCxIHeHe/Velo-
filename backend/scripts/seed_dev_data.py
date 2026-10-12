@@ -38,6 +38,12 @@ If the PostgreSQL user does not exist yet:
 
     python scripts/seed_dev_data.py --firebase-uid YOUR_FIREBASE_UID
 
+NOTE - fares: ride pricing is a fixed fare per directed dock pair and is NOT
+seeded (this script never invents prices). Before ending a ride, configure at
+least one pair, e.g. (development TEST values only):
+
+    python scripts/set_dev_fares.py --origin "MG Road Dock" --destination "Koramangala Dock" --amount 20
+
 Usage from backend/:
 
     alembic upgrade head

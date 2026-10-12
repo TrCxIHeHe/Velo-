@@ -15,6 +15,8 @@ from app.database import get_db
 from app.dock.repository import DockRepository, VehicleRepository
 from app.notifications.repository import NotificationRepository, UserDeviceRepository
 from app.notifications.service import NotificationService
+from app.pricing.repository import DockPairFareRepository
+from app.pricing.service import PricingService
 from app.ride.repository import RideRepository
 from app.ride.schemas import ConfirmRideRequest, EndRideRequest, RequestRideTokenRequest
 from app.ride.service import RideService
@@ -37,6 +39,7 @@ async def get_ride_service(
         AuditLogRepository(session),
         NotificationService(NotificationRepository(session), UserDeviceRepository(session), firebase),
         redis_client=redis_client,
+        pricing_service=PricingService(DockPairFareRepository(session), DockRepository(session)),
     )
 
 
@@ -61,6 +64,22 @@ async def confirm_ride(body: ConfirmRideRequest, service: RideServiceDep):
     try:
         ride = await service.confirm_ride(body.ride_token, body.dock_id)
         return success_response(ride.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
+
+
+@router.get("/{ride_id}/fare-estimate")
+async def fare_estimate(
+    ride_id: uuid.UUID, destination_dock_id: uuid.UUID, current_user: CurrentUser, service: RideServiceDep
+):
+    """Server-calculated fare quote for ending ``ride_id`` at ``destination_dock_id``.
+
+    Read-only: does not reserve a slot, mutate the ride or touch the wallet.
+    The origin dock is derived from the stored ride, never from the client.
+    """
+    try:
+        quote = await service.quote_fare(current_user.id, ride_id, destination_dock_id)
+        return success_response(quote.model_dump(mode="json"))
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)
 

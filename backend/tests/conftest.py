@@ -207,3 +207,13 @@ async def admin_headers(client: AsyncClient, firebase_mock, db_session: AsyncSes
     firebase_mock.verify_id_token.return_value = {"uid": MOCK_UID, "phone_number": MOCK_PHONE}
 
     return {"Authorization": f"Bearer {token}"}
+
+
+# ── Ride / pricing world builder (see tests/world.py) ────────────────────────
+
+@pytest_asyncio.fixture
+async def world(client, db_session, auth_headers, redis_mock):
+    from tests.world import World
+
+    me = (await client.get("/api/v1/auth/me", headers=auth_headers)).json()["data"]
+    return World(db_session, redis_mock, uuid.UUID(me["id"]), auth_headers)

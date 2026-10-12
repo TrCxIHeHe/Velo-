@@ -1,4 +1,11 @@
 """
+LEGACY RAW-SQL TOOL — prefer scripts/recover_ride.py.
+
+This script edits tables directly: it does NOT settle the wallet, assign a
+destination slot or write an audit entry, so cancelling an ACTIVE ride here
+leaves the scooter wherever it was and the fare uncharged. scripts/recover_ride.py
+reuses the validated completion flow instead.
+
 OPTIONAL MAINTENANCE / RECOVERY TOOL — not part of normal operation.
 
 Expired PENDING rides are now moved to EXPIRED automatically by the backend
