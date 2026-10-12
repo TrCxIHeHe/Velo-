@@ -17,3 +17,9 @@ final AutoDisposeFutureProvider<List<Dock>> dockListProvider =
     FutureProvider.autoDispose<List<Dock>>(
   (ref) => ref.watch(dockRepositoryProvider).listDocks(),
 );
+
+/// One dock by id (coordinates + name), used for the ride's origin and the receipt.
+final AutoDisposeFutureProviderFamily<Dock, String> dockByIdProvider =
+    FutureProvider.autoDispose.family<Dock, String>(
+  (ref, dockId) => ref.watch(dockRepositoryProvider).getDock(dockId),
+);

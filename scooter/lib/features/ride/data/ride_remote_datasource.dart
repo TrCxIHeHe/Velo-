@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:scooter/core/constants/api_constants.dart';
 import 'package:scooter/core/errors/app_exception.dart';
+import 'package:scooter/features/ride/domain/models/fare_quote.dart';
 import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/models/ride_token.dart';
 
@@ -59,6 +60,20 @@ class RideRemoteDataSource {
         data: {'dock_id': dockId},
       );
       return Ride.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  /// Server-calculated fare estimate. Read-only on the server: it neither
+  /// reserves a slot nor charges the wallet.
+  Future<FareQuote> getFareQuote(String rideId, String destinationDockId) async {
+    try {
+      final r = await _dio.get(
+        '${ApiConstants.rides}/$rideId/fare-estimate',
+        queryParameters: {'destination_dock_id': destinationDockId},
+      );
+      return FareQuote.fromJson(r.data['data'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _map(e);
     }

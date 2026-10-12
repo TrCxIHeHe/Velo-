@@ -1,3 +1,5 @@
+import 'package:scooter/core/utils/server_time.dart';
+
 class Ride {
   const Ride({
     required this.id,
@@ -12,6 +14,7 @@ class Ride {
     this.endedAt,
     this.durationSeconds,
     this.fareAmount,
+    this.pricingStrategy,
   });
 
   final String id;
@@ -20,12 +23,19 @@ class Ride {
   final String startDockId;
   final String? endDockId;
   final String status;
+
+  /// All timestamps are UTC instants (see [parseServerTimestamp]).
   final DateTime? startedAt;
   final DateTime? endedAt;
   final int? durationSeconds;
+
+  /// Final fare as persisted by the server — never computed on the client.
   final double? fareAmount;
   final String fareCurrency;
+  final String? pricingStrategy;
   final DateTime createdAt;
+
+  bool get isActive => status == 'ACTIVE';
 
   factory Ride.fromJson(Map<String, dynamic> json) => Ride(
         id: json['id'] as String,
@@ -34,11 +44,12 @@ class Ride {
         startDockId: json['start_dock_id'] as String,
         endDockId: json['end_dock_id'] as String?,
         status: json['status'] as String,
-        startedAt: json['started_at'] != null ? DateTime.parse(json['started_at'] as String) : null,
-        endedAt: json['ended_at'] != null ? DateTime.parse(json['ended_at'] as String) : null,
-        durationSeconds: json['duration_seconds'] as int?,
+        startedAt: parseServerTimestampOrNull(json['started_at']),
+        endedAt: parseServerTimestampOrNull(json['ended_at']),
+        durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
         fareAmount: (json['fare_amount'] as num?)?.toDouble(),
         fareCurrency: json['fare_currency'] as String,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        pricingStrategy: json['pricing_strategy'] as String?,
+        createdAt: parseServerTimestamp(json['created_at'] as String),
       );
 }

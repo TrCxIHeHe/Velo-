@@ -271,7 +271,20 @@ ipconfig | Select-String "IPv4"
 flutter run -d <device-id> --dart-define=API_BASE_URL=http://192.168.x.x:8000/api/v1
 ```
 
-Device and machine must be on the same WiFi network.
+Device and machine must be on the same WiFi network, and the backend must listen on
+all interfaces - `uvicorn app.main:app --reload` binds to `127.0.0.1` only, which the
+phone cannot reach (there `127.0.0.1` is the phone itself):
+
+```bash
+# From backend/
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Allow inbound TCP 8000 in the OS firewall (Windows: "Private" network profile), then
+verify from the phone's browser: `http://<LAN-IP>:8000/api/v1/health`. CORS does not
+affect the native app (it is browser-only); `CORS_ORIGINS=*` stays a dev default and
+must be set to real origins in production. Never hardcode the IP in source - it is
+read only from `--dart-define=API_BASE_URL=...` (`ApiConstants.baseUrl`).
 
 ### iOS simulator (macOS only)
 

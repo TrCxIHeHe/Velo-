@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scooter/features/auth/presentation/providers/auth_providers.dart';
 import 'package:scooter/features/ride/data/ride_remote_datasource.dart';
 import 'package:scooter/features/ride/data/ride_repository_impl.dart';
+import 'package:scooter/features/ride/domain/models/fare_quote.dart';
 import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/ride_repository.dart';
 
@@ -24,4 +25,14 @@ final AutoDisposeFutureProviderFamily<Ride, String> rideDetailProvider =
 /// an action (ending a ride).
 final AutoDisposeFutureProvider<Ride?> activeRideProvider = FutureProvider.autoDispose<Ride?>(
   (ref) => ref.watch(rideRepositoryProvider).getActiveRide(),
+);
+
+/// Key for one quote: a ride and one candidate destination dock. A different
+/// destination is a different provider instance, so a previous destination's
+/// fare can never be shown for the new selection (it starts out loading).
+typedef FareQuoteArgs = ({String rideId, String destinationDockId});
+
+final AutoDisposeFutureProviderFamily<FareQuote, FareQuoteArgs> fareQuoteProvider =
+    FutureProvider.autoDispose.family<FareQuote, FareQuoteArgs>(
+  (ref, args) => ref.watch(rideRepositoryProvider).getFareQuote(args.rideId, args.destinationDockId),
 );

@@ -136,7 +136,7 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.rideActivePath,
         name: AppRoutes.rideActive,
-        builder: (_, __) => const RideTrackingScreen(),
+        builder: (_, __) => const RideTrackingScreen(standalone: true),
       ),
     ],
   );

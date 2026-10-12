@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:scooter/core/utils/money.dart';
+import 'package:scooter/core/utils/server_time.dart';
 import 'package:scooter/core/widgets/app_button.dart';
 import 'package:scooter/core/widgets/state_view.dart';
+import 'package:scooter/features/dock/presentation/providers/dock_providers.dart';
 import 'package:scooter/features/ride/domain/fare_breakdown.dart';
 import 'package:scooter/features/ride/presentation/providers/ride_providers.dart';
+import 'package:scooter/router/app_router.dart';
 
 class RideReceiptScreen extends ConsumerWidget {
   const RideReceiptScreen({super.key, required this.rideId});
@@ -16,8 +20,23 @@ class RideReceiptScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rideAsync = ref.watch(rideDetailProvider(rideId));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ride Receipt')),
+    // The receipt is reached with context.go, so there may be no stack to pop:
+    // always send the user Home (system back included).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go(AppRoutes.home);
+      },
+      child: Scaffold(
+      appBar: AppBar(
+        title: const Text('Ride Receipt'),
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          key: const Key('receipt-close'),
+          icon: const Icon(Icons.close),
+          onPressed: () => context.go(AppRoutes.home),
+        ),
+      ),
       body: rideAsync.when(
         loading: () => const StateView.loading(),
         error: (e, _) => StateView.error(
@@ -27,12 +46,18 @@ class RideReceiptScreen extends ConsumerWidget {
         data: (ride) {
           final durationSeconds = ride.durationSeconds ?? 0;
           final fareAmount = ride.fareAmount ?? 0;
+          // Dock names are presentation only; the fare itself is ride.fareAmount.
+          final originName = ref.watch(dockByIdProvider(ride.startDockId)).valueOrNull?.name;
+          final destinationName =
+              ride.endDockId == null ? null : ref.watch(dockByIdProvider(ride.endDockId!)).valueOrNull?.name;
           final breakdown = FareBreakdown.fromRide(
-            durationSeconds: durationSeconds,
             fareAmount: fareAmount,
+            pricingStrategy: ride.pricingStrategy,
+            originName: originName,
+            destinationName: destinationName,
           );
           final scheme = Theme.of(context).colorScheme;
-          final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+          String money(num v) => formatMoney(v, ride.fareCurrency);
 
           return SafeArea(
             child: ListView(
@@ -66,11 +91,11 @@ class RideReceiptScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _Stat(
-                        value: _formatDuration(durationSeconds),
+                        value: formatElapsed(Duration(seconds: durationSeconds)),
                         label: 'Duration',
                       ),
                       _Stat(
-                        value: currency.format(fareAmount),
+                        value: money(fareAmount),
                         label: 'Total Fare',
                       ),
                     ],
@@ -98,7 +123,7 @@ class RideReceiptScreen extends ConsumerWidget {
                                 child: Text(item.label, style: Theme.of(context).textTheme.bodyLarge),
                               ),
                               Text(
-                                currency.format(item.amount),
+                                money(item.amount),
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                               ),
                             ],
@@ -112,7 +137,7 @@ class RideReceiptScreen extends ConsumerWidget {
                           children: [
                             const Text('Total charged', style: TextStyle(fontWeight: FontWeight.w700)),
                             Text(
-                              currency.format(breakdown.total),
+                              money(breakdown.total),
                               style: TextStyle(fontWeight: FontWeight.w700, color: scheme.primary),
                             ),
                           ],
@@ -123,21 +148,17 @@ class RideReceiptScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 40),
                 PrimaryButton(
+                  key: const Key('receipt-done'),
                   label: 'Done',
-                  onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+                  onPressed: () => context.go(AppRoutes.home),
                 ),
               ],
             ),
           );
         },
       ),
+      ),
     );
-  }
-
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 }
 

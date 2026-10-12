@@ -1,50 +1,36 @@
-import 'dart:math';
-
-const double kFarePerMinute = 2.0;
-const double kMinimumFare = 5.0;
-
+/// One line of the receipt breakdown.
 class FareLineItem {
   const FareLineItem(this.label, this.amount);
   final String label;
   final double amount;
 }
 
-/// Client-side presentation of the backend's fare rule
-/// (`backend/app/ride/service.py:_calculate_fare` — ₹2/minute, ₹5 minimum,
-/// billed minutes rounded up). Mirrors that formula exactly so the
-/// breakdown always reconciles to the ride's actual `fare_amount`; if a
-/// ride ever doesn't match (e.g. a future pricing change), it falls back
-/// to a single line item showing the true total rather than a breakdown
-/// that doesn't add up.
+/// Presentation of a fare that the **server** already calculated and charged.
+///
+/// With the fixed dock-pair model the fare does not depend on duration, so
+/// there is nothing to compute or reconcile here: the breakdown is a single
+/// transparent line (the route) whose amount is exactly the persisted
+/// `fare_amount`. Rides priced by another/legacy rule simply show "Ride fare".
 class FareBreakdown {
   const FareBreakdown(this.lineItems, this.total);
 
   final List<FareLineItem> lineItems;
   final double total;
 
-  static int billedMinutes(int durationSeconds) => (durationSeconds / 60).ceil();
+  static const String fixedDockPairStrategy = 'fixed_dock_pair';
 
-  static double computeFare(int durationSeconds) {
-    final minutes = billedMinutes(durationSeconds);
-    final fare = max(minutes * kFarePerMinute, kMinimumFare);
-    return double.parse(fare.toStringAsFixed(2));
-  }
-
-  factory FareBreakdown.fromRide({required int durationSeconds, required double fareAmount}) {
-    final minutes = billedMinutes(durationSeconds);
-    final computed = computeFare(durationSeconds);
-
-    if ((computed - fareAmount).abs() > 0.01) {
-      return FareBreakdown([FareLineItem('Ride fare', fareAmount)], fareAmount);
-    }
-
-    if (minutes * kFarePerMinute <= kMinimumFare) {
-      return FareBreakdown([FareLineItem('Minimum fare', fareAmount)], fareAmount);
-    }
-
-    return FareBreakdown(
-      [FareLineItem('Ride fare ($minutes min × ₹${kFarePerMinute.toStringAsFixed(2)})', fareAmount)],
-      fareAmount,
-    );
+  factory FareBreakdown.fromRide({
+    required double fareAmount,
+    String? pricingStrategy,
+    String? originName,
+    String? destinationName,
+  }) {
+    final isFixedPair = pricingStrategy == fixedDockPairStrategy;
+    final label = !isFixedPair
+        ? 'Ride fare'
+        : (originName != null && destinationName != null)
+            ? 'Fixed route fare · $originName → $destinationName'
+            : 'Fixed route fare';
+    return FareBreakdown([FareLineItem(label, fareAmount)], fareAmount);
   }
 }

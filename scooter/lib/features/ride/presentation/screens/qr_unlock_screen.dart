@@ -91,7 +91,15 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     final requestedAt = DateTime.now();
     try {
       final token = await _rideRepo.requestToken(widget.dockId);
-      if (!mounted || generation != _generation) return;
+      if (!mounted) {
+        // The user left while the request was in flight: the server already
+        // created a PENDING ride, so retire it (best effort; it would also
+        // expire on its own). If it was activated meanwhile the server refuses
+        // (RIDE_INVALID_STATE) and the active ride is left untouched.
+        _rideRepo.cancelRide(token.rideId).then<void>((_) {}, onError: (Object _) {});
+        return;
+      }
+      if (generation != _generation) return;
       setState(() {
         _token = token;
         _deadline = requestedAt.add(Duration(seconds: token.expiresInSeconds));

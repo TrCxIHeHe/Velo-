@@ -1,4 +1,5 @@
 import 'package:scooter/features/ride/data/ride_remote_datasource.dart';
+import 'package:scooter/features/ride/domain/models/fare_quote.dart';
 import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/models/ride_token.dart';
 import 'package:scooter/features/ride/domain/ride_repository.dart';
@@ -22,4 +23,8 @@ class RideRepositoryImpl implements RideRepository {
 
   @override
   Future<Ride> endRide(String rideId, String dockId) => _remote.endRide(rideId, dockId);
+
+  @override
+  Future<FareQuote> getFareQuote(String rideId, String destinationDockId) =>
+      _remote.getFareQuote(rideId, destinationDockId);
 }

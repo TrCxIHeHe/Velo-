@@ -1,3 +1,4 @@
+import 'package:scooter/features/ride/domain/models/fare_quote.dart';
 import 'package:scooter/features/ride/domain/models/ride.dart';
 import 'package:scooter/features/ride/domain/models/ride_token.dart';
 
@@ -7,4 +8,5 @@ abstract interface class RideRepository {
   Future<RideToken> requestToken(String dockId);
   Future<Ride> cancelRide(String rideId);
   Future<Ride> endRide(String rideId, String dockId);
+  Future<FareQuote> getFareQuote(String rideId, String destinationDockId);
 }
