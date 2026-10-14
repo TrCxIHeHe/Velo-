@@ -3,7 +3,7 @@ import uuid
 
 from sqlalchemy import func, select
 
-from app.models import AuditLog, Ride, WalletTransaction
+from app.models import AuditLog, DockPairFare, Ride, WalletTransaction
 
 
 def url(ride_id, dest):
@@ -119,3 +119,49 @@ async def test_reverse_pair_uses_its_own_fare(client, world):
     await world.fare(b, a, "99.00")
     q = (await client.get(url(ride.id, b), headers=world.headers)).json()["data"]
     assert q["fare_amount"] == 20.0
+
+
+async def test_pre_ride_quote_does_not_require_a_ride(client, world):
+    a = await world.dock("A", vehicles=1)
+    b = await world.dock("B")
+    await world.fare(a, b, "23.50")
+    await world.fund(100)
+
+    response = await client.get(
+        f"/api/v1/rides/fare-quote?origin_dock_id={a}&destination_dock_id={b}",
+        headers=world.headers,
+    )
+    assert response.status_code == 200, response.text
+    quote = response.json()["data"]
+    assert quote["ride_id"] is None
+    assert quote["fare_amount"] == 23.5
+
+
+async def test_token_persists_accepted_quote_and_completion_uses_it(client, world, db_session):
+    a = await world.dock("A", vehicles=1)
+    b = await world.dock("B")
+    await world.fare(a, b, "20.00")
+    await world.fund(100)
+
+    token = await world.service().request_ride_token(
+        world.user_id, a, destination_dock_id=b
+    )
+    await db_session.commit()
+    ride = await world.service().confirm_ride(token.ride_token, a)
+    await db_session.commit()
+
+    # Changing the tariff after acceptance must not change the agreed fare.
+    tariff = (await db_session.execute(
+        select(DockPairFare).where(
+            DockPairFare.origin_dock_id == a,
+            DockPairFare.destination_dock_id == b,
+        )
+    )).scalar_one()
+    tariff.amount = 99
+    await db_session.commit()
+    response = await client.post(
+        f"/api/v1/rides/{ride.id}/end", json={"dock_id": str(b)}, headers=world.headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["fare_amount"] == 20.0
+    assert await world.balance() == 80.0

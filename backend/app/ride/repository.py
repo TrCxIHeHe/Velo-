@@ -10,8 +10,11 @@ class RideRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create(self, user_id: uuid.UUID, start_dock_id: uuid.UUID, jti: str) -> Ride:
-        ride = Ride(user_id=user_id, start_dock_id=start_dock_id, ride_token_jti=jti, status="PENDING")
+    async def create(self, user_id: uuid.UUID, start_dock_id: uuid.UUID, jti: str, **values) -> Ride:
+        ride = Ride(
+            user_id=user_id, start_dock_id=start_dock_id, ride_token_jti=jti,
+            status="PENDING", **values,
+        )
         self.session.add(ride)
         await self.session.flush()
         return ride

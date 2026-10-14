@@ -36,6 +36,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from sqlalchemy.exc import IntegrityError
 
 from jose import JWTError, jwt
 
@@ -125,7 +126,10 @@ class RideService:
             if _is_stale_pending(ride, now):
                 await self._expire_ride(ride)
 
-    async def request_ride_token(self, user_id: uuid.UUID, dock_id: uuid.UUID) -> RideTokenResponse:
+    async def request_ride_token(
+        self, user_id: uuid.UUID, dock_id: uuid.UUID,
+        destination_dock_id: uuid.UUID | None = None,
+    ) -> RideTokenResponse:
         # 1. Expired PENDING rides can never complete — retire them so they
         #    cannot block a new token.
         await self._expire_stale_pending(user_id)
@@ -151,6 +155,12 @@ class RideService:
         if not has_balance:
             raise InsufficientBalanceError()
 
+        accepted = None
+        if destination_dock_id is not None:
+            accepted = await self._quote_destination(
+                user_id, dock_id, destination_dock_id, ride_id=uuid.uuid4()
+            )
+
         # 3. The user explicitly asked for another QR while a previous one is
         #    still valid: supersede it so there is never more than one live
         #    PENDING ride.  Done only after all validations pass so a failed
@@ -168,7 +178,20 @@ class RideService:
         jti = hashlib.sha256(ride_token.encode("utf-8")).hexdigest()
 
         # Create PENDING ride
-        ride = await self.ride_repo.create(user_id, dock_id, jti)
+        try:
+            ride = await self.ride_repo.create(
+                user_id, dock_id, jti,
+                planned_end_dock_id=destination_dock_id,
+                accepted_fare_amount=float(accepted.amount) if accepted else None,
+                accepted_fare_currency=accepted.currency if accepted else None,
+                accepted_pricing_strategy=accepted.strategy if accepted else None,
+                accepted_pricing_reference_id=accepted.reference_id if accepted else None,
+            )
+        except IntegrityError:
+            # The partial unique index closes the check/create race between
+            # concurrent token requests.
+            await self.ride_repo.session.rollback()
+            raise RideAlreadyActiveError()
         await self.audit_repo.log(user_id, "RIDE_TOKEN_ISSUED", "ride", str(ride.id))
 
         return RideTokenResponse(
@@ -301,7 +324,7 @@ class RideService:
         if await self.dock_repo.count_available_slots(destination_dock_id) < 1:
             raise DockFullError()
 
-        fare = await self.pricing.calculate(self._pricing_context(ride, destination_dock_id))
+        fare = await self._quote_destination(user_id, ride.start_dock_id, destination_dock_id, ride_id=ride.id, ride=ride)
 
         wallet = await self.wallet_service.wallet_repo.find_by_user_id(user_id)
         balance = quantize_money(wallet.balance) if wallet is not None else None
@@ -320,6 +343,71 @@ class RideService:
             wallet_balance=balance,
             sufficient_balance=sufficient,
         )
+
+    async def quote_pre_ride(
+        self, user_id: uuid.UUID, origin_dock_id: uuid.UUID, destination_dock_id: uuid.UUID
+    ) -> FareQuoteResponse:
+        fare = await self._quote_destination(
+            user_id, origin_dock_id, destination_dock_id, ride_id=None
+        )
+        wallet = await self.wallet_service.wallet_repo.find_by_user_id(user_id)
+        balance = quantize_money(wallet.balance) if wallet is not None else None
+        return FareQuoteResponse(
+            ride_id=None, origin_dock_id=origin_dock_id,
+            destination_dock_id=destination_dock_id, fare_amount=fare.amount,
+            currency=fare.currency, pricing_strategy=fare.strategy,
+            pricing_reference_id=fare.reference_id, wallet_balance=balance,
+            sufficient_balance=None if wallet is None else (
+                balance >= fare.amount and wallet.currency.upper() == fare.currency.upper()
+            ),
+        )
+
+    async def accept_fare_quote(
+        self, user_id: uuid.UUID, ride_id: uuid.UUID, destination_dock_id: uuid.UUID
+    ) -> FareQuoteResponse:
+        """Persist a replacement destination and fare after user confirmation."""
+        ride = await self.ride_repo.find_by_id_for_update(ride_id)
+        if not ride:
+            raise RideNotFoundError()
+        if ride.user_id != user_id:
+            raise RideForbiddenError()
+        if ride.status != "ACTIVE":
+            raise RideInvalidStateError()
+
+        fare = await self._quote_destination(
+            user_id, ride.start_dock_id, destination_dock_id,
+            ride_id=ride.id, ride=ride,
+        )
+        ride.planned_end_dock_id = destination_dock_id
+        ride.accepted_fare_amount = fare.amount
+        ride.accepted_fare_currency = fare.currency
+        ride.accepted_pricing_strategy = fare.strategy
+        ride.accepted_pricing_reference_id = fare.reference_id
+        await self.ride_repo.session.flush()
+        return FareQuoteResponse(
+            ride_id=ride.id,
+            origin_dock_id=ride.start_dock_id,
+            destination_dock_id=destination_dock_id,
+            fare_amount=fare.amount,
+            currency=fare.currency,
+            pricing_strategy=fare.strategy,
+            pricing_reference_id=fare.reference_id,
+        )
+
+    async def _quote_destination(self, user_id, origin_dock_id, destination_dock_id, *, ride_id, ride=None):
+        origin = await self.dock_repo.find_by_id(origin_dock_id)
+        destination = await self.dock_repo.find_by_id(destination_dock_id)
+        if not origin or not origin.is_active or not destination or not destination.is_active:
+            raise DockNotFoundError()
+        if origin.id == destination.id:
+            raise SameDockReturnNotAllowedError()
+        if await self.dock_repo.count_available_slots(destination_dock_id) < 1:
+            raise DockFullError()
+        if ride is None:
+            class QuoteRide: pass
+            ride = QuoteRide()
+            ride.id, ride.user_id, ride.start_dock_id, ride.started_at = ride_id, user_id, origin_dock_id, None
+        return await self.pricing.calculate(self._pricing_context(ride, destination_dock_id))
 
     @staticmethod
     def _pricing_context(ride, destination_dock_id, ended_at=None, duration_seconds=None) -> PricingContext:
@@ -388,9 +476,18 @@ class RideService:
         started_at = ride.started_at or now
         duration_seconds = max(int((now - started_at).total_seconds()), 0)
 
-        fare = await self.pricing.calculate(
-            self._pricing_context(ride, end_dock_id, ended_at=now, duration_seconds=duration_seconds)
-        )
+        if ride.planned_end_dock_id is not None and ride.planned_end_dock_id != end_dock_id:
+            raise RideInvalidStateError("This ride has a different planned destination.")
+        if ride.accepted_fare_amount is not None:
+            fare = FareResult(
+                amount=ride.accepted_fare_amount, currency=ride.accepted_fare_currency,
+                strategy=ride.accepted_pricing_strategy,
+                reference_id=ride.accepted_pricing_reference_id,
+            )
+        else:
+            fare = await self.pricing.calculate(
+                self._pricing_context(ride, end_dock_id, ended_at=now, duration_seconds=duration_seconds)
+            )
         amount = float(fare.amount)  # legacy Float ledger columns; identical value everywhere
 
         # Re-check availability *now* (authoritative; the picker/quote may be stale).

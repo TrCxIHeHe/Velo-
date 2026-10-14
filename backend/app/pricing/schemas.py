@@ -52,7 +52,7 @@ class DockPairFareResponse(BaseModel):
 class FareQuoteResponse(BaseModel):
     """Server-calculated estimate for ending ``ride_id`` at ``destination_dock_id``."""
 
-    ride_id: uuid.UUID
+    ride_id: uuid.UUID | None = None
     origin_dock_id: uuid.UUID
     destination_dock_id: uuid.UUID
     fare_amount: Money

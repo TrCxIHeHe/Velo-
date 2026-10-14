@@ -18,7 +18,10 @@ from app.notifications.service import NotificationService
 from app.pricing.repository import DockPairFareRepository
 from app.pricing.service import PricingService
 from app.ride.repository import RideRepository
-from app.ride.schemas import ConfirmRideRequest, EndRideRequest, RequestRideTokenRequest
+from app.ride.schemas import (
+    AcceptFareQuoteRequest, ConfirmRideRequest, EndRideRequest,
+    PreRideFareQuoteRequest, RequestRideTokenRequest,
+)
 from app.ride.service import RideService
 from app.wallet.repository import WalletRepository
 from app.wallet.service import WalletService
@@ -52,7 +55,7 @@ async def request_ride_token(
     request: Request, body: RequestRideTokenRequest, current_user: CurrentUser, service: RideServiceDep
 ):
     try:
-        result = await service.request_ride_token(current_user.id, body.dock_id)
+        result = await service.request_ride_token(current_user.id, body.dock_id, body.destination_dock_id)
         return success_response(result.model_dump(), status_code=201)
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)
@@ -84,11 +87,54 @@ async def fare_estimate(
         return error_response(exc.code, exc.message, exc.http_status)
 
 
+@router.get("/fare-quote")
+async def pre_ride_fare_quote(
+    origin_dock_id: uuid.UUID, destination_dock_id: uuid.UUID,
+    current_user: CurrentUser, service: RideServiceDep,
+):
+    """Quote a planned trip before a ride/token exists."""
+    try:
+        quote = await service.quote_pre_ride(current_user.id, origin_dock_id, destination_dock_id)
+        return success_response(quote.model_dump(mode="json"))
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
+
+
+@router.post("/quote")
+async def pre_ride_fare_quote_post(
+    body: PreRideFareQuoteRequest, current_user: CurrentUser, service: RideServiceDep,
+):
+    try:
+        quote = await service.quote_pre_ride(
+            current_user.id, body.origin_dock_id, body.destination_dock_id
+        )
+        return success_response(quote.model_dump(mode="json"))
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
+
+
 @router.post("/{ride_id}/end")
 async def end_ride(ride_id: uuid.UUID, body: EndRideRequest, current_user: CurrentUser, service: RideServiceDep):
     try:
         ride = await service.end_ride(current_user.id, ride_id, body.dock_id)
         return success_response(ride.model_dump())
+    except AppException as exc:
+        return error_response(exc.code, exc.message, exc.http_status)
+
+
+@router.post("/{ride_id}/quote")
+async def accept_fare_quote(
+    ride_id: uuid.UUID,
+    body: AcceptFareQuoteRequest,
+    current_user: CurrentUser,
+    service: RideServiceDep,
+):
+    """Accept a replacement destination/fare before ending an active ride."""
+    try:
+        quote = await service.accept_fare_quote(
+            current_user.id, ride_id, body.destination_dock_id
+        )
+        return success_response(quote.model_dump(mode="json"))
     except AppException as exc:
         return error_response(exc.code, exc.message, exc.http_status)
 
