@@ -16,15 +16,27 @@ class RideRepositoryImpl implements RideRepository {
   Future<Ride?> getActiveRide() => _remote.getActiveRide();
 
   @override
-  Future<RideToken> requestToken(String dockId) => _remote.requestToken(dockId);
+  Future<RideToken> requestToken(String dockId, {String? destinationDockId}) =>
+      _remote.requestToken(dockId, destinationDockId: destinationDockId);
 
   @override
   Future<Ride> cancelRide(String rideId) => _remote.cancelRide(rideId);
 
   @override
-  Future<Ride> endRide(String rideId, String dockId) => _remote.endRide(rideId, dockId);
+  Future<Ride> endRide(String rideId, String dockId) =>
+      _remote.endRide(rideId, dockId);
 
   @override
   Future<FareQuote> getFareQuote(String rideId, String destinationDockId) =>
       _remote.getFareQuote(rideId, destinationDockId);
+
+  @override
+  Future<FareQuote> acceptFareQuote(String rideId, String destinationDockId) =>
+      _remote.acceptFareQuote(rideId, destinationDockId);
+
+  @override
+  Future<FareQuote> getPreRideFareQuote(
+    String originDockId,
+    String destinationDockId,
+  ) => _remote.getPreRideFareQuote(originDockId, destinationDockId);
 }

@@ -18,26 +18,29 @@ Dock dock(
   bool active = true,
   double lat = 12.97,
   double lng = 77.59,
-}) =>
-    Dock(
-      id: id,
-      name: name ?? 'Dock $id',
-      locationLat: lat,
-      locationLng: lng,
-      totalSlots: 5,
-      availableSlots: free,
-      isActive: active,
-    );
+}) => Dock(
+  id: id,
+  name: name ?? 'Dock $id',
+  locationLat: lat,
+  locationLng: lng,
+  totalSlots: 5,
+  availableSlots: free,
+  isActive: active,
+);
 
-Ride activeRide({String id = 'ride-1', String startDockId = 'A', DateTime? startedAt}) => Ride(
-      id: id,
-      userId: 'u',
-      startDockId: startDockId,
-      status: 'ACTIVE',
-      fareCurrency: 'INR',
-      createdAt: DateTime.utc(2026, 10, 11, 9),
-      startedAt: startedAt ?? DateTime.utc(2026, 10, 11, 10),
-    );
+Ride activeRide({
+  String id = 'ride-1',
+  String startDockId = 'A',
+  DateTime? startedAt,
+}) => Ride(
+  id: id,
+  userId: 'u',
+  startDockId: startDockId,
+  status: 'ACTIVE',
+  fareCurrency: 'INR',
+  createdAt: DateTime.utc(2026, 10, 11, 9),
+  startedAt: startedAt ?? DateTime.utc(2026, 10, 11, 10),
+);
 
 Ride completedRide({
   String id = 'ride-1',
@@ -45,23 +48,23 @@ Ride completedRide({
   String currency = 'INR',
   String? strategy = 'fixed_dock_pair',
   int duration = 754,
-}) =>
-    Ride(
-      id: id,
-      userId: 'u',
-      startDockId: 'A',
-      endDockId: 'B',
-      status: 'COMPLETED',
-      fareCurrency: currency,
-      fareAmount: fare,
-      pricingStrategy: strategy,
-      durationSeconds: duration,
-      createdAt: DateTime.utc(2026, 10, 11, 9),
-      startedAt: DateTime.utc(2026, 10, 11, 10),
-      endedAt: DateTime.utc(2026, 10, 11, 10, 12, 34),
-    );
+}) => Ride(
+  id: id,
+  userId: 'u',
+  startDockId: 'A',
+  endDockId: 'B',
+  status: 'COMPLETED',
+  fareCurrency: currency,
+  fareAmount: fare,
+  pricingStrategy: strategy,
+  durationSeconds: duration,
+  createdAt: DateTime.utc(2026, 10, 11, 9),
+  startedAt: DateTime.utc(2026, 10, 11, 10),
+  endedAt: DateTime.utc(2026, 10, 11, 10, 12, 34),
+);
 
-FareQuote quote(String destination, double amount, {bool? sufficient}) => FareQuote(
+FareQuote quote(String destination, double amount, {bool? sufficient}) =>
+    FareQuote(
       rideId: 'ride-1',
       originDockId: 'A',
       destinationDockId: destination,
@@ -92,7 +95,8 @@ class FakeDockRepository implements DockRepository {
   }
 
   @override
-  Future<Dock> getDock(String dockId) async => docks.firstWhere((d) => d.id == dockId);
+  Future<Dock> getDock(String dockId) async =>
+      docks.firstWhere((d) => d.id == dockId);
 }
 
 class FakeRideRepository implements RideRepository {
@@ -120,7 +124,10 @@ class FakeRideRepository implements RideRepository {
   }
 
   @override
-  Future<FareQuote> getFareQuote(String rideId, String destinationDockId) async {
+  Future<FareQuote> getFareQuote(
+    String rideId,
+    String destinationDockId,
+  ) async {
     quoteRequests.add(destinationDockId);
     final make = quotes[destinationDockId];
     if (make == null) throw StateError('no quote stub for $destinationDockId');
@@ -134,6 +141,16 @@ class FakeRideRepository implements RideRepository {
   }
 
   @override
+  Future<FareQuote> acceptFareQuote(
+    String rideId,
+    String destinationDockId,
+  ) async {
+    final make = quotes[destinationDockId];
+    if (make == null) throw StateError('no quote stub for $destinationDockId');
+    return make();
+  }
+
+  @override
   Future<Ride> getRide(String id) async => rideById ?? completedRide(id: id);
 
   @override
@@ -143,7 +160,14 @@ class FakeRideRepository implements RideRepository {
   }
 
   @override
-  Future<RideToken> requestToken(String dockId) => throw UnimplementedError();
+  Future<RideToken> requestToken(String dockId, {String? destinationDockId}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<FareQuote> getPreRideFareQuote(
+    String originDockId,
+    String destinationDockId,
+  ) => throw UnimplementedError();
 }
 
 /// Wallet refresh after a ride is best effort; this keeps it off the network.
@@ -151,10 +175,14 @@ class FakeWalletRepository implements WalletRepository {
   @override
   Future<Wallet> getBalance() async => throw StateError('offline in tests');
   @override
-  Future<TransactionPage> listTransactions({int skip = 0, int limit = 20}) async =>
+  Future<TransactionPage> listTransactions({
+    int skip = 0,
+    int limit = 20,
+  }) async => throw StateError('offline in tests');
+  @override
+  Future<Wallet> topUp(double amount, {String? referenceId}) async =>
       throw StateError('offline in tests');
   @override
-  Future<Wallet> topUp(double amount, {String? referenceId}) async => throw StateError('offline in tests');
-  @override
-  Future<RazorpayOrder> createRazorpayOrder(double amount) async => throw StateError('offline in tests');
+  Future<RazorpayOrder> createRazorpayOrder(double amount) async =>
+      throw StateError('offline in tests');
 }

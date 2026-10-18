@@ -1,8 +1,8 @@
-/// Server-calculated estimate for ending a ride at one destination dock.
-/// Display only: the final charge is recomputed by the server on completion.
+/// Server-calculated fare for the selected directed dock pair.
+/// Before a ride exists, this is the quote the user accepts for QR issuance.
 class FareQuote {
   const FareQuote({
-    required this.rideId,
+    this.rideId,
     required this.originDockId,
     required this.destinationDockId,
     required this.fareAmount,
@@ -12,7 +12,7 @@ class FareQuote {
     this.sufficientBalance,
   });
 
-  final String rideId;
+  final String? rideId;
   final String originDockId;
   final String destinationDockId;
   final double fareAmount;
@@ -22,13 +22,13 @@ class FareQuote {
   final bool? sufficientBalance;
 
   factory FareQuote.fromJson(Map<String, dynamic> json) => FareQuote(
-        rideId: json['ride_id'] as String,
-        originDockId: json['origin_dock_id'] as String,
-        destinationDockId: json['destination_dock_id'] as String,
-        fareAmount: (json['fare_amount'] as num).toDouble(),
-        currency: json['currency'] as String,
-        pricingStrategy: json['pricing_strategy'] as String,
-        walletBalance: (json['wallet_balance'] as num?)?.toDouble(),
-        sufficientBalance: json['sufficient_balance'] as bool?,
-      );
+    rideId: json['ride_id'] as String?,
+    originDockId: json['origin_dock_id'] as String,
+    destinationDockId: json['destination_dock_id'] as String,
+    fareAmount: (json['fare_amount'] as num).toDouble(),
+    currency: json['currency'] as String,
+    pricingStrategy: json['pricing_strategy'] as String,
+    walletBalance: (json['wallet_balance'] as num?)?.toDouble(),
+    sufficientBalance: json['sufficient_balance'] as bool?,
+  );
 }

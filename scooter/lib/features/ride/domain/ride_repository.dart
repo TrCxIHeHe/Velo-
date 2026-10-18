@@ -5,8 +5,13 @@ import 'package:scooter/features/ride/domain/models/ride_token.dart';
 abstract interface class RideRepository {
   Future<Ride> getRide(String id);
   Future<Ride?> getActiveRide();
-  Future<RideToken> requestToken(String dockId);
+  Future<RideToken> requestToken(String dockId, {String? destinationDockId});
   Future<Ride> cancelRide(String rideId);
   Future<Ride> endRide(String rideId, String dockId);
   Future<FareQuote> getFareQuote(String rideId, String destinationDockId);
+  Future<FareQuote> acceptFareQuote(String rideId, String destinationDockId);
+  Future<FareQuote> getPreRideFareQuote(
+    String originDockId,
+    String destinationDockId,
+  );
 }

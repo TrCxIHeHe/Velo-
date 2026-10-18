@@ -17,7 +17,11 @@
 Only `fixed_dock_pair` exists: fare = the configured amount for (origin → destination). A→B and B→A are
 independent rows. Duration is recorded but does not affect the fare. A missing/inactive tariff raises
 `FARE_NOT_CONFIGURED` (409); there is no fallback formula. The ride stores `fare_amount`, `fare_currency`,
-`pricing_strategy`, `pricing_reference_id` (the tariff row used).
+`pricing_strategy`, `pricing_reference_id` (the tariff row used). When a
+destination is selected before unlock, the token request stores
+`planned_end_dock_id` and the accepted fare snapshot
+(`accepted_fare_amount`, currency, strategy and reference). Completion charges
+that snapshot, so later tariff changes cannot alter an already accepted trip.
 
 ### Adding a strategy later (distance, time, subscription, promo, surge)
 1. Implement `PricingStrategy.calculate(ctx) -> FareResult` (ctx has ride, user, origin, destination, start/end, duration).
@@ -38,6 +42,13 @@ GET /api/v1/rides/{ride_id}/fare-estimate?destination_dock_id=<uuid>
 ```
 Errors: `RIDE_FORBIDDEN` 403, `RIDE_NOT_FOUND` 404, `RIDE_INVALID_STATE` 409 (not ACTIVE), `DOCK_NOT_FOUND` 404
 (missing/inactive), `DOCK_FULL` 400, `RIDE_SAME_DOCK_NOT_ALLOWED` 400, `FARE_NOT_CONFIGURED` 409.
+
+**Pre-ride fare quote** (authenticated, read-only; no ride is created)
+```
+GET /api/v1/rides/fare-quote?origin_dock_id=<uuid>&destination_dock_id=<uuid>
+```
+The token request may include `destination_dock_id` to persist this quote as
+the planned destination and accepted fare.
 
 **End ride** – `POST /api/v1/rides/{id}/end` body `{"dock_id": "<uuid>"}` (nothing else is read).
 Idempotent: repeating it for an already completed ride at the same dock returns that ride, no second charge.
@@ -79,6 +90,8 @@ mid-way would be **committed half-done** (confirmed: a failed wallet debit left 
 end cannot overwrite each other. Notification failure never undoes a completed ride.
 Limit: row locks and true concurrency are only exercised on PostgreSQL; the test-suite (SQLite) covers the
 compare-and-set paths by simulating the interleaving, not real parallel transactions.
+The database also enforces one `PENDING` or `ACTIVE` ride per user with a
+partial unique index, closing the concurrent token-request check/create race.
 
 ## 6. Manual diagnostics for an unrecoverable ride
 Recovery refuses (changing nothing) when records disagree. Inspect, in `psql`:

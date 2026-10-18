@@ -21,14 +21,24 @@ import 'package:scooter/features/wallet/presentation/providers/wallet_providers.
 import 'package:scooter/router/app_router.dart';
 
 /// Builds the map area. Overridable so widget tests do not need real tiles.
-typedef RideMapBuilder = Widget Function(BuildContext context, RideMapData data, ValueChanged<Dock> onSelect);
+typedef RideMapBuilder =
+    Widget Function(
+      BuildContext context,
+      RideMapData data,
+      ValueChanged<Dock> onSelect,
+    );
 
 /// Active-ride screen. Self-contained (watches the caller's active ride), so
 /// the same widget serves as the "Ride" bottom-nav tab ([standalone] = false)
 /// and as the standalone `/ride/active` route reached after a QR unlock
 /// ([standalone] = true, which adds a back action to Home).
 class RideTrackingScreen extends ConsumerStatefulWidget {
-  const RideTrackingScreen({super.key, this.standalone = false, this.mapBuilder, this.now = DateTime.now});
+  const RideTrackingScreen({
+    super.key,
+    this.standalone = false,
+    this.mapBuilder,
+    this.now = DateTime.now,
+  });
 
   final bool standalone;
   final RideMapBuilder? mapBuilder;
@@ -86,9 +96,14 @@ class _RideTrackingScreenState extends ConsumerState<RideTrackingScreen> {
     if (dock != null && mounted) _selectDestination(ride, dock);
   }
 
-  Dock? _destinationFor(Ride ride) => _destinationRideId == ride.id ? _destination : null;
+  Dock? _destinationFor(Ride ride) =>
+      _destinationRideId == ride.id ? _destination : null;
 
-  Future<void> _confirmAndEnd(Ride ride, Dock destination, FareQuote quote) async {
+  Future<void> _confirmAndEnd(
+    Ride ride,
+    Dock destination,
+    FareQuote quote,
+  ) async {
     if (_busy) return;
     setState(() => _busy = true);
 
@@ -101,8 +116,16 @@ class _RideTrackingScreenState extends ConsumerState<RideTrackingScreen> {
           'will be charged to your wallet.',
         ),
         actions: [
-          TextButton(key: const Key('end-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-          FilledButton(key: const Key('end-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('End ride')),
+          TextButton(
+            key: const Key('end-cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton(
+            key: const Key('end-confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('End ride'),
+          ),
         ],
       ),
     );
@@ -112,7 +135,14 @@ class _RideTrackingScreenState extends ConsumerState<RideTrackingScreen> {
     }
 
     try {
-      final ended = await ref.read(rideRepositoryProvider).endRide(ride.id, destination.id);
+      if (ride.plannedEndDockId != destination.id) {
+        await ref
+            .read(rideRepositoryProvider)
+            .acceptFareQuote(ride.id, destination.id);
+      }
+      final ended = await ref
+          .read(rideRepositoryProvider)
+          .endRide(ride.id, destination.id);
       // Navigate only after the backend confirmed the ride is completed.
       ref.invalidate(activeRideProvider);
       ref.invalidate(dockListProvider);
@@ -158,7 +188,8 @@ class _RideTrackingScreenState extends ConsumerState<RideTrackingScreen> {
     } else if (ride == null || !ride.isActive) {
       body = const StateView.empty(
         title: 'No active ride',
-        subtitle: 'Unlock a scooter from the Map or Unlock tab to start riding.',
+        subtitle:
+            'Unlock a scooter from the Map or Unlock tab to start riding.',
       );
     } else {
       body = _ActiveRide(
@@ -234,15 +265,36 @@ class _ActiveRide extends ConsumerWidget {
     final originAsync = ref.watch(dockByIdProvider(ride.startDockId));
 
     final eligible = docksAsync.hasValue
-        ? eligibleDestinations(docksAsync.requireValue, originDockId: ride.startDockId)
+        ? eligibleDestinations(
+            docksAsync.requireValue,
+            originDockId: ride.startDockId,
+          )
         : const <Dock>[];
-    final mapData = RideMapData(origin: originAsync.valueOrNull, destinations: eligible, selected: destination);
+    final plannedMatches = ride.plannedEndDockId == null
+        ? const <Dock>[]
+        : eligible.where((dock) => dock.id == ride.plannedEndDockId).toList();
+    final plannedDestination =
+        destination ?? (plannedMatches.isEmpty ? null : plannedMatches.first);
+    final mapData = RideMapData(
+      origin: originAsync.valueOrNull,
+      destinations: eligible,
+      selected: plannedDestination,
+    );
 
-    final quoteAsync = destination == null
+    final quoteAsync = plannedDestination == null
         ? null
-        : ref.watch(fareQuoteProvider((rideId: ride.id, destinationDockId: destination!.id)));
+        : ref.watch(
+            fareQuoteProvider((
+              rideId: ride.id,
+              destinationDockId: plannedDestination.id,
+            )),
+          );
     final quote = quoteAsync?.valueOrNull;
-    final canEnd = !busy && destination != null && quote != null && !(quoteAsync?.isLoading ?? true);
+    final canEnd =
+        !busy &&
+        plannedDestination != null &&
+        quote != null &&
+        !(quoteAsync?.isLoading ?? true);
 
     final map = mapBuilder != null
         ? mapBuilder!(context, mapData, onSelectDock)
@@ -261,7 +313,10 @@ class _ActiveRide extends ConsumerWidget {
                 "Couldn't refresh — showing your last known ride",
                 style: TextStyle(color: scheme.onErrorContainer, fontSize: 13),
               ),
-              trailing: TextButton(onPressed: onRetrySync, child: const Text('Retry')),
+              trailing: TextButton(
+                onPressed: onRetrySync,
+                child: const Text('Retry'),
+              ),
             ),
           ),
         // Header: status + live duration
@@ -276,25 +331,41 @@ class _ActiveRide extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.circle, size: 10, color: Colors.green.shade600),
+                      Icon(
+                        Icons.circle,
+                        size: 10,
+                        color: Colors.green.shade600,
+                      ),
                       const SizedBox(width: 6),
-                      const Text('Ride in progress', key: Key('ride-status'), style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Ride in progress',
+                        key: Key('ride-status'),
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text('Duration', style: TextStyle(fontSize: 11, color: muted)),
+                  Text(
+                    'Duration',
+                    style: TextStyle(fontSize: 11, color: muted),
+                  ),
                 ],
               ),
               if (ride.startedAt != null)
                 ElapsedDuration(startedAt: ride.startedAt!, now: now)
               else
-                const Text('--:--', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+                const Text(
+                  '--:--',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                ),
             ],
           ),
         ),
         Expanded(child: map),
         ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+          ),
           child: Material(
             elevation: 8,
             color: Theme.of(context).cardColor,
@@ -305,18 +376,23 @@ class _ActiveRide extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _DestinationRow(
-                    destination: destination,
+                    destination: plannedDestination,
                     origin: originAsync.valueOrNull,
                     enabled: !busy,
                     onTap: onPickDestination,
                   ),
                   const SizedBox(height: 12),
                   _FareSection(
-                    destination: destination,
+                    destination: plannedDestination,
                     quoteAsync: quoteAsync,
                     onRetry: () {
-                      if (destination != null) {
-                        ref.invalidate(fareQuoteProvider((rideId: ride.id, destinationDockId: destination!.id)));
+                      if (plannedDestination != null) {
+                        ref.invalidate(
+                          fareQuoteProvider((
+                            rideId: ride.id,
+                            destinationDockId: plannedDestination.id,
+                          )),
+                        );
                       }
                     },
                   ),
@@ -325,7 +401,9 @@ class _ActiveRide extends ConsumerWidget {
                     key: const Key('end-ride-button'),
                     label: 'End Ride',
                     loading: busy,
-                    onPressed: canEnd ? () => onEnd(ride, destination!, quote!) : null,
+                    onPressed: canEnd
+                        ? () => onEnd(ride, plannedDestination, quote)
+                        : null,
                   ),
                 ],
               ),
@@ -338,7 +416,12 @@ class _ActiveRide extends ConsumerWidget {
 }
 
 class _DestinationRow extends StatelessWidget {
-  const _DestinationRow({required this.destination, required this.origin, required this.enabled, required this.onTap});
+  const _DestinationRow({
+    required this.destination,
+    required this.origin,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final Dock? destination;
   final Dock? origin;
@@ -367,15 +450,23 @@ class _DestinationRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    destination == null ? 'Choose where to return' : destination!.name,
+                    destination == null
+                        ? 'Choose where to return'
+                        : destination!.name,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   if (origin != null)
-                    Text('From ${origin!.name}', style: TextStyle(fontSize: 12, color: muted)),
+                    Text(
+                      'From ${origin!.name}',
+                      style: TextStyle(fontSize: 12, color: muted),
+                    ),
                 ],
               ),
             ),
-            Text(destination == null ? 'Select' : 'Change', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+            Text(
+              destination == null ? 'Select' : 'Change',
+              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            ),
           ],
         ),
       ),
@@ -384,7 +475,11 @@ class _DestinationRow extends StatelessWidget {
 }
 
 class _FareSection extends StatelessWidget {
-  const _FareSection({required this.destination, required this.quoteAsync, required this.onRetry});
+  const _FareSection({
+    required this.destination,
+    required this.quoteAsync,
+    required this.onRetry,
+  });
 
   final Dock? destination;
   final AsyncValue<FareQuote>? quoteAsync;
@@ -411,7 +506,11 @@ class _FareSection extends StatelessWidget {
       return Row(
         key: const Key('fare-loading'),
         children: [
-          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
           const SizedBox(width: 12),
           Text('Calculating fare…', style: TextStyle(color: muted)),
         ],
@@ -423,7 +522,12 @@ class _FareSection extends StatelessWidget {
         children: [
           Icon(Icons.error_outline, color: scheme.error),
           const SizedBox(width: 8),
-          Expanded(child: Text(async.error.toString(), style: TextStyle(color: scheme.error, fontSize: 13))),
+          Expanded(
+            child: Text(
+              async.error.toString(),
+              style: TextStyle(color: scheme.error, fontSize: 13),
+            ),
+          ),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       );
@@ -440,7 +544,10 @@ class _FareSection extends StatelessWidget {
           key: const Key('fare-amount'),
           style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
         ),
-        Text('Fixed fare for this route · ${quote.currency}', style: TextStyle(fontSize: 12, color: muted)),
+        Text(
+          'Fixed fare for this route · ${quote.currency}',
+          style: TextStyle(fontSize: 12, color: muted),
+        ),
         if (quote.sufficientBalance == false)
           Padding(
             padding: const EdgeInsets.only(top: 8),

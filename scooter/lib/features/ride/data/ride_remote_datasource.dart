@@ -30,11 +30,18 @@ class RideRemoteDataSource {
     }
   }
 
-  Future<RideToken> requestToken(String dockId) async {
+  Future<RideToken> requestToken(
+    String dockId, {
+    String? destinationDockId,
+  }) async {
     try {
       final r = await _dio.post(
         '${ApiConstants.rides}/token',
-        data: {'dock_id': dockId},
+        data: {
+          'dock_id': dockId,
+          if (destinationDockId != null)
+            'destination_dock_id': destinationDockId,
+        },
       );
       return RideToken.fromJson(r.data['data'] as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -67,11 +74,47 @@ class RideRemoteDataSource {
 
   /// Server-calculated fare estimate. Read-only on the server: it neither
   /// reserves a slot nor charges the wallet.
-  Future<FareQuote> getFareQuote(String rideId, String destinationDockId) async {
+  Future<FareQuote> getFareQuote(
+    String rideId,
+    String destinationDockId,
+  ) async {
     try {
       final r = await _dio.get(
         '${ApiConstants.rides}/$rideId/fare-estimate',
         queryParameters: {'destination_dock_id': destinationDockId},
+      );
+      return FareQuote.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  Future<FareQuote> getPreRideFareQuote(
+    String originDockId,
+    String destinationDockId,
+  ) async {
+    try {
+      final r = await _dio.get(
+        '${ApiConstants.rides}/fare-quote',
+        queryParameters: {
+          'origin_dock_id': originDockId,
+          'destination_dock_id': destinationDockId,
+        },
+      );
+      return FareQuote.fromJson(r.data['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  Future<FareQuote> acceptFareQuote(
+    String rideId,
+    String destinationDockId,
+  ) async {
+    try {
+      final r = await _dio.post(
+        '${ApiConstants.rides}/$rideId/quote',
+        data: {'destination_dock_id': destinationDockId},
       );
       return FareQuote.fromJson(r.data['data'] as Map<String, dynamic>);
     } on DioException catch (e) {

@@ -6,12 +6,16 @@ import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:scooter/core/widgets/app_button.dart';
 import 'package:scooter/core/widgets/state_view.dart';
+import 'package:scooter/core/utils/money.dart';
+import 'package:scooter/features/dock/domain/models/dock.dart';
+import 'package:scooter/features/dock/presentation/providers/dock_providers.dart';
 import 'package:scooter/features/ride/domain/models/ride_token.dart';
 import 'package:scooter/features/ride/domain/ride_repository.dart';
 import 'package:scooter/features/ride/presentation/providers/ride_providers.dart';
+import 'package:scooter/features/ride/presentation/widgets/destination_picker_sheet.dart';
 import 'package:scooter/router/app_router.dart';
 
-enum _Status { requesting, showing, confirmed, expired, error }
+enum _Status { planning, requesting, showing, confirmed, expired, error }
 
 class QrUnlockScreen extends ConsumerStatefulWidget {
   const QrUnlockScreen({super.key, required this.dockId});
@@ -22,13 +26,15 @@ class QrUnlockScreen extends ConsumerStatefulWidget {
   ConsumerState<QrUnlockScreen> createState() => _QrUnlockScreenState();
 }
 
-class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBindingObserver {
-  _Status _status = _Status.requesting;
+class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen>
+    with WidgetsBindingObserver {
+  _Status _status = _Status.planning;
   RideToken? _token;
   int _secondsRemaining = 0;
   Timer? _countdownTimer;
   Timer? _pollTimer;
   String? _error;
+  Dock? _destination;
 
   /// Absolute moment after which the QR must no longer be shown as valid.
   ///
@@ -52,7 +58,8 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     super.initState();
     _rideRepo = ref.read(rideRepositoryProvider);
     WidgetsBinding.instance.addObserver(this);
-    _requestToken();
+    // The ride does not exist until the user confirms this plan. Keep the
+    // origin/destination/fare selection ahead of token creation.
   }
 
   @override
@@ -66,7 +73,9 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     // anyway once the 30 s token lifetime elapses.
     final token = _token;
     if (_status == _Status.showing && token != null) {
-      _rideRepo.cancelRide(token.rideId).then<void>((_) {}, onError: (Object _) {});
+      _rideRepo
+          .cancelRide(token.rideId)
+          .then<void>((_) {}, onError: (Object _) {});
     }
     super.dispose();
   }
@@ -90,15 +99,21 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
 
     final requestedAt = DateTime.now();
     try {
-      final token = await _rideRepo.requestToken(widget.dockId);
+      final token = await _rideRepo.requestToken(
+        widget.dockId,
+        destinationDockId: _destination!.id,
+      );
       if (!mounted) {
         // The user left while the request was in flight: the server already
         // created a PENDING ride, so retire it (best effort; it would also
         // expire on its own). If it was activated meanwhile the server refuses
         // (RIDE_INVALID_STATE) and the active ride is left untouched.
-        _rideRepo.cancelRide(token.rideId).then<void>((_) {}, onError: (Object _) {});
+        _rideRepo
+            .cancelRide(token.rideId)
+            .then<void>((_) {}, onError: (Object _) {});
         return;
       }
+
       if (generation != _generation) return;
       setState(() {
         _token = token;
@@ -117,9 +132,24 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     }
   }
 
+  Future<void> _pickDestination() async {
+    final destination = await DestinationPickerSheet.show(
+      context,
+      ref,
+      originDockId: widget.dockId,
+      selectedDockId: _destination?.id,
+    );
+    if (destination != null && mounted) {
+      setState(() => _destination = destination);
+    }
+  }
+
   void _startCountdown() {
     _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(milliseconds: 250), (_) => _tickCountdown());
+    _countdownTimer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) => _tickCountdown(),
+    );
     _tickCountdown();
   }
 
@@ -131,7 +161,9 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
       return;
     }
     final seconds = (remainingMs / 1000).ceil();
-    if (seconds != _secondsRemaining) setState(() => _secondsRemaining = seconds);
+    if (seconds != _secondsRemaining) {
+      setState(() => _secondsRemaining = seconds);
+    }
   }
 
   /// Stop presenting the QR as valid and offer a new one.
@@ -175,7 +207,9 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     final generation = _generation;
     try {
       final ride = await _rideRepo.getRide(token.rideId);
-      if (!mounted || generation != _generation || _status != _Status.showing) return;
+      if (!mounted || generation != _generation || _status != _Status.showing) {
+        return;
+      }
       switch (ride.status) {
         case 'ACTIVE':
           _onConfirmed();
@@ -206,18 +240,22 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
     final stopwatch = Stopwatch()..start();
 
     void scheduleNext(void Function() tick) {
-      if (!mounted || generation != _generation || _status != _Status.showing) return;
+      if (!mounted || generation != _generation || _status != _Status.showing) {
+        return;
+      }
       final elapsed = stopwatch.elapsed.inSeconds;
       final interval = elapsed < 10
           ? const Duration(seconds: 2)
           : elapsed < 30
-              ? const Duration(seconds: 4)
-              : const Duration(seconds: 6);
+          ? const Duration(seconds: 4)
+          : const Duration(seconds: 6);
       _pollTimer = Timer(interval, tick);
     }
 
     void tick() async {
-      if (!mounted || generation != _generation || _status != _Status.showing) return;
+      if (!mounted || generation != _generation || _status != _Status.showing) {
+        return;
+      }
       await _checkRideStatus();
       scheduleNext(tick);
     }
@@ -235,11 +273,16 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
 
   Widget _buildBody() {
     switch (_status) {
+      case _Status.planning:
+        return _buildPlan();
       case _Status.requesting:
       case _Status.confirmed:
         return const StateView.loading(subtitle: 'Preparing your unlock code…');
       case _Status.error:
-        return StateView.error(subtitle: _error ?? 'Please try again.', onRetry: _requestToken);
+        return StateView.error(
+          subtitle: _error ?? 'Please try again.',
+          onRetry: _requestToken,
+        );
       case _Status.expired:
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -248,7 +291,10 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
             children: [
               const Text('⏱️', style: TextStyle(fontSize: 40)),
               const SizedBox(height: 12),
-              Text('Code expired', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Code expired',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Text(
                 'This code is no longer valid. Generate a new one to try again.',
@@ -256,7 +302,13 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
                 style: TextStyle(color: Theme.of(context).hintColor),
               ),
               const SizedBox(height: 24),
-              SizedBox(width: 200, child: PrimaryButton(label: 'Generate new code', onPressed: _requestToken)),
+              SizedBox(
+                width: 200,
+                child: PrimaryButton(
+                  label: 'Generate new code',
+                  onPressed: _requestToken,
+                ),
+              ),
             ],
           ),
         );
@@ -277,7 +329,9 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
                 ),
                 child: QrImageView(
                   data: _token!.rideToken,
@@ -300,15 +354,100 @@ class _QrUnlockScreenState extends ConsumerState<QrUnlockScreen> with WidgetsBin
                 ),
               ),
               const SizedBox(height: 12),
-              Text('Seconds remaining', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Seconds remaining',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 8),
               Text(
                 'One-time use · ${_token!.expiresInSeconds} second window',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                ),
               ),
             ],
           ),
         );
     }
+  }
+
+  Widget _buildPlan() {
+    final origin = ref.watch(dockByIdProvider(widget.dockId));
+    final quoteAsync = _destination == null
+        ? null
+        : ref.watch(
+            preRideFareQuoteProvider((
+              originDockId: widget.dockId,
+              destinationDockId: _destination!.id,
+            )),
+          );
+    final quote = quoteAsync?.valueOrNull;
+    final canStart =
+        _destination != null && quote != null && !quoteAsync!.isLoading;
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Plan your ride', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            origin.when(
+              loading: () => 'From your selected dock…',
+              error: (e, _) => e.toString(),
+              data: (dock) => 'From ${dock.name}',
+            ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            key: const Key('pre-ride-destination'),
+            onPressed: _pickDestination,
+            child: Text(
+              _destination == null
+                  ? 'Choose destination'
+                  : 'To ${_destination!.name}',
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_destination == null)
+            const Text(
+              'Choose a destination to see your fare.',
+              key: Key('pre-ride-fare-hint'),
+            )
+          else if (quoteAsync!.isLoading)
+            const LinearProgressIndicator(key: Key('pre-ride-fare-loading'))
+          else if (quoteAsync.hasError)
+            Row(
+              key: const Key('pre-ride-fare-error'),
+              children: [
+                Expanded(child: Text(quoteAsync.error.toString())),
+                TextButton(
+                  onPressed: () => ref.invalidate(
+                    preRideFareQuoteProvider((
+                      originDockId: widget.dockId,
+                      destinationDockId: _destination!.id,
+                    )),
+                  ),
+                  child: const Text('Retry'),
+                ),
+              ],
+            )
+          else
+            Text(
+              '${formatMoney(quote!.fareAmount, quote.currency)} estimated fare',
+              key: const Key('pre-ride-fare'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          const SizedBox(height: 24),
+          PrimaryButton(
+            key: const Key('start-ride-button'),
+            label: 'Start ride',
+            onPressed: canStart ? _requestToken : null,
+          ),
+        ],
+      ),
+    );
   }
 }

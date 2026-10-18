@@ -38,9 +38,9 @@
 
 // WiFi/backend config
 const char* WIFI_SSID      = "Vishisht's S24";
-const char* WIFI_PASSWORD  = "######";
+const char* WIFI_PASSWORD  = "124vishi";
 const char* DOCK_ID        = "33333333-3333-3333-3333-333333333333";
-const char* BACKEND_HOST   = "10.208.154.138";
+const char* BACKEND_HOST   = "10.104.158.138";
 const int   BACKEND_PORT   = 8000;
 
 // UART to CAM

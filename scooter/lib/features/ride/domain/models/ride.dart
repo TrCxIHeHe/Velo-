@@ -10,6 +10,7 @@ class Ride {
     required this.createdAt,
     this.vehicleId,
     this.endDockId,
+    this.plannedEndDockId,
     this.startedAt,
     this.endedAt,
     this.durationSeconds,
@@ -22,6 +23,7 @@ class Ride {
   final String? vehicleId;
   final String startDockId;
   final String? endDockId;
+  final String? plannedEndDockId;
   final String status;
 
   /// All timestamps are UTC instants (see [parseServerTimestamp]).
@@ -38,18 +40,19 @@ class Ride {
   bool get isActive => status == 'ACTIVE';
 
   factory Ride.fromJson(Map<String, dynamic> json) => Ride(
-        id: json['id'] as String,
-        userId: json['user_id'] as String,
-        vehicleId: json['vehicle_id'] as String?,
-        startDockId: json['start_dock_id'] as String,
-        endDockId: json['end_dock_id'] as String?,
-        status: json['status'] as String,
-        startedAt: parseServerTimestampOrNull(json['started_at']),
-        endedAt: parseServerTimestampOrNull(json['ended_at']),
-        durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
-        fareAmount: (json['fare_amount'] as num?)?.toDouble(),
-        fareCurrency: json['fare_currency'] as String,
-        pricingStrategy: json['pricing_strategy'] as String?,
-        createdAt: parseServerTimestamp(json['created_at'] as String),
-      );
+    id: json['id'] as String,
+    userId: json['user_id'] as String,
+    vehicleId: json['vehicle_id'] as String?,
+    startDockId: json['start_dock_id'] as String,
+    endDockId: json['end_dock_id'] as String?,
+    plannedEndDockId: json['planned_end_dock_id'] as String?,
+    status: json['status'] as String,
+    startedAt: parseServerTimestampOrNull(json['started_at']),
+    endedAt: parseServerTimestampOrNull(json['ended_at']),
+    durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
+    fareAmount: (json['fare_amount'] as num?)?.toDouble(),
+    fareCurrency: json['fare_currency'] as String,
+    pricingStrategy: json['pricing_strategy'] as String?,
+    createdAt: parseServerTimestamp(json['created_at'] as String),
+  );
 }
